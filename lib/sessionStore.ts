@@ -26,15 +26,16 @@ export type ParseSession = {
   createdAt: string;
 };
 
-type ResultEntry = { value: OptimizeResponse; expiresAt: number };
-type SessionEntry = { value: ParseSession; expiresAt: number };
+type ResultEntry  = { value: OptimizeResponse; lastActiveAt: number };
+type SessionEntry = { value: ParseSession;     lastActiveAt: number };
 
-const TTL_MS = 1000 * 60 * 60 * 24; // 24h
+// 5 minutes of inactivity → session expires.
+// The clock resets on every read or write, so active users are never expired.
+const INACTIVITY_TTL_MS = 1000 * 60 * 5;
 
 declare global {
   // eslint-disable-next-line no-var
-  var __OPT_RESULT_STORE__: Map<string, ResultEntry> | undefined;
-
+  var __OPT_RESULT_STORE__:  Map<string, ResultEntry>  | undefined;
   // eslint-disable-next-line no-var
   var __OPT_SESSION_STORE__: Map<string, SessionEntry> | undefined;
 }
@@ -53,16 +54,46 @@ function sessionStore(): Map<string, SessionEntry> {
   return global.__OPT_SESSION_STORE__;
 }
 
-function isExpired(expiresAt: number) {
-  return Date.now() > expiresAt;
+function isInactive(lastActiveAt: number): boolean {
+  return Date.now() - lastActiveAt > INACTIVITY_TTL_MS;
+}
+
+function touchResult(id: string): void {
+  const entry = resultStore().get(id);
+  if (entry) entry.lastActiveAt = Date.now();
+}
+
+function touchSession(id: string): void {
+  const entry = sessionStore().get(id);
+  if (entry) entry.lastActiveAt = Date.now();
+}
+
+/* ----------------------------- CLEAR EVERYTHING ---------------------------- */
+
+/**
+ * Wipes ALL sessions and results from the in-memory store.
+ * Called by POST /api/clear-session when the user clicks "Start Over".
+ */
+export function clearAllSessions(): void {
+  global.__OPT_RESULT_STORE__  = new Map();
+  global.__OPT_SESSION_STORE__ = new Map();
+}
+
+/**
+ * Clear a single session + its result by id.
+ * Called by POST /api/clear-session when the user clicks "Start Over".
+ */
+export function clearSession(id: string): void {
+  resultStore().delete(id);
+  sessionStore().delete(id);
 }
 
 /* ----------------------------- FINAL RESULT STORE ----------------------------- */
 
 export function putResult(res: OptimizeResponse) {
   resultStore().set(res.id, {
-    value: res,
-    expiresAt: Date.now() + TTL_MS,
+    value:        res,
+    lastActiveAt: Date.now(),
   });
 }
 
@@ -70,11 +101,12 @@ export function getResult(id: string): OptimizeResponse | null {
   const entry = resultStore().get(id);
   if (!entry) return null;
 
-  if (isExpired(entry.expiresAt)) {
+  if (isInactive(entry.lastActiveAt)) {
     resultStore().delete(id);
     return null;
   }
 
+  touchResult(id); // user is active — reset the inactivity clock
   return entry.value;
 }
 
@@ -82,14 +114,14 @@ export function updateResultImages(
   id: string,
   images: GeneratedImages
 ): OptimizeResponse | null {
-  const existing = getResult(id);
+  const existing = getResult(id); // getResult already touches
   if (!existing) return null;
 
   const updated: OptimizeResponse = {
     ...existing,
     images: {
       ...(existing.images || {}),
-      ...(images || {}),
+      ...(images          || {}),
     },
   };
 
@@ -101,8 +133,8 @@ export function updateResultImages(
 
 export function putParseSession(session: ParseSession) {
   sessionStore().set(session.id, {
-    value: session,
-    expiresAt: Date.now() + TTL_MS,
+    value:        session,
+    lastActiveAt: Date.now(),
   });
 }
 
@@ -110,11 +142,12 @@ export function getParseSession(id: string): ParseSession | null {
   const entry = sessionStore().get(id);
   if (!entry) return null;
 
-  if (isExpired(entry.expiresAt)) {
+  if (isInactive(entry.lastActiveAt)) {
     sessionStore().delete(id);
     return null;
   }
 
+  touchSession(id); // user is active — reset the inactivity clock
   return entry.value;
 }
 
@@ -122,14 +155,14 @@ export function updateParseSession(
   id: string,
   patch: Partial<ParseSession>
 ): ParseSession | null {
-  const existing = getParseSession(id);
+  const existing = getParseSession(id); // getParseSession already touches
   if (!existing) return null;
 
   const updated: ParseSession = {
     ...existing,
     ...patch,
     sectionResults: patch.sectionResults ?? existing.sectionResults,
-    images: patch.images ?? existing.images,
+    images:         patch.images         ?? existing.images,
   };
 
   putParseSession(updated);
@@ -141,7 +174,7 @@ export function putSectionResult(
   section: SectionKey,
   data: unknown
 ): ParseSession | null {
-  const existing = getParseSession(id);
+  const existing = getParseSession(id); // getParseSession already touches
   if (!existing) return null;
 
   const updated: ParseSession = {
@@ -163,14 +196,14 @@ export function updateParseSessionImages(
   id: string,
   images: GeneratedImages
 ): ParseSession | null {
-  const existing = getParseSession(id);
+  const existing = getParseSession(id); // getParseSession already touches
   if (!existing) return null;
 
   const updated: ParseSession = {
     ...existing,
     images: {
       ...(existing.images || {}),
-      ...(images || {}),
+      ...(images          || {}),
     },
   };
 

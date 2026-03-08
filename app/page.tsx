@@ -44,144 +44,208 @@ const STEPS = [
 
 export default function LandingPage() {
   return (
-    <main className="space-y-10 md:space-y-14">
-      <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute -top-24 -left-24 h-80 w-80 rounded-full bg-[color:var(--luna-200)]/20 blur-3xl" />
-          <div className="absolute top-0 right-0 h-72 w-72 rounded-full bg-[color:var(--luna-100)]/10 blur-3xl" />
-          <div className="absolute -bottom-24 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-[color:var(--luna-400)]/35 blur-3xl" />
-        </div>
-
-        <div className="relative grid gap-10 p-8 md:grid-cols-[1.2fr_.8fr] md:p-12">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-4 py-2 text-xs text-white/75">
-              <span className="h-2 w-2 rounded-full bg-[color:var(--luna-200)]" />
-              Resume-first LinkedIn optimization
-            </div>
-
-            <h1 className="mt-6 max-w-4xl text-4xl font-semibold leading-tight tracking-tight md:text-6xl">
-              Build a sharper LinkedIn profile without sending one giant prompt every time.
-            </h1>
-
-            <p className="mt-5 max-w-2xl text-base leading-7 text-white/72 md:text-lg">
-              This workflow is designed to parse once, optimize deliberately, and improve each
-              section with less rate-limit risk and better control.
-            </p>
-
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link
-                href="/optimize"
-                className="rounded-xl bg-[color:var(--luna-200)] px-5 py-3 font-semibold text-[#001018] transition hover:bg-[color:var(--luna-100)]"
-              >
-                Start optimizing
-              </Link>
-
-              <a
-                href="#how-it-works"
-                className="rounded-xl border border-white/10 bg-black/30 px-5 py-3 text-white/80 transition hover:border-white/20 hover:text-white"
-              >
-                See how it works
-              </a>
-            </div>
-
-            <div className="mt-8 flex flex-wrap gap-3 text-sm text-white/58">
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
-                Structured parsing
-              </span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
-                Section generation
-              </span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
-                Keyword intelligence
-              </span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
-                Scored output
-              </span>
-            </div>
+    <>
+      <main className="space-y-10 md:space-y-14">
+        <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl">
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute -top-24 -left-24 h-80 w-80 rounded-full bg-[color:var(--luna-200)]/20 blur-3xl" />
+            <div className="absolute top-0 right-0 h-72 w-72 rounded-full bg-[color:var(--luna-100)]/10 blur-3xl" />
+            <div className="absolute -bottom-24 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-[color:var(--luna-400)]/35 blur-3xl" />
           </div>
 
-          <div className="grid gap-4">
-            <div className="rounded-2xl border border-white/10 bg-black/25 p-5">
-              <div className="text-sm font-medium text-white/60">Why this structure works</div>
-              <div className="mt-3 text-sm leading-7 text-white/78">
-                The landing page explains the product. The optimization page handles the workflow.
-                That reduces clutter, improves perceived quality, and prepares the UI for
-                section-by-section generation later.
+          <div className="relative grid gap-10 p-8 md:grid-cols-[1.2fr_.8fr] md:p-12">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-4 py-2 text-xs text-white/75">
+                <span className="h-2 w-2 rounded-full bg-[color:var(--luna-200)]" />
+                Resume-first LinkedIn optimization
+              </div>
+
+              <h1 className="mt-6 max-w-4xl text-4xl font-semibold leading-tight tracking-tight md:text-6xl">
+                Build a sharper LinkedIn profile without sending one giant prompt every time.
+              </h1>
+
+              <p className="mt-5 max-w-2xl text-base leading-7 text-white/72 md:text-lg">
+                This workflow is designed to parse once, optimize deliberately, and improve each
+                section with less rate-limit risk and better control.
+              </p>
+
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Link
+                  href="/optimize"
+                  className="rounded-xl bg-[color:var(--luna-200)] px-5 py-3 font-semibold text-[#001018] transition hover:bg-[color:var(--luna-100)]"
+                >
+                  Start optimizing
+                </Link>
+
+                <a
+                  href="#how-it-works"
+                  className="rounded-xl border border-white/10 bg-black/30 px-5 py-3 text-white/80 transition hover:border-white/20 hover:text-white"
+                >
+                  See how it works
+                </a>
+              </div>
+
+              <div className="mt-8 flex flex-wrap gap-3 text-sm text-white/58">
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
+                  Structured parsing
+                </span>
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
+                  Section generation
+                </span>
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
+                  Keyword intelligence
+                </span>
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
+                  Scored output
+                </span>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-[color:var(--luna-200)]/20 bg-[color:var(--luna-400)]/20 p-5">
-              <div className="text-sm font-medium text-white/60">Current direction</div>
-              <div className="mt-3 text-sm leading-7 text-white/78">
-                Parse the resume first. Then optimize one section at a time. That is the better UX
-                and the safer backend pattern.
+            <div className="grid gap-4">
+              <div className="rounded-2xl border border-white/10 bg-black/25 p-5">
+                <div className="text-sm font-medium text-white/60">Who is this for?</div>
+                <div className="mt-3 text-sm leading-7 text-white/78">
+                  Job seekers, career changers, and anyone who wants their LinkedIn profile to work
+                  harder — without spending hours rewriting it from scratch.
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-[color:var(--luna-200)]/20 bg-[color:var(--luna-400)]/20 p-5">
+                <div className="text-sm font-medium text-white/60">What you get</div>
+                <div className="mt-3 text-sm leading-7 text-white/78">
+                  A keyword-optimized headline, a compelling About section, stronger experience
+                  bullets, and a clear positioning strategy — all tailored to your target role.
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {FEATURES.map((item) => (
-          <div
-            key={item.title}
-            className="rounded-2xl border border-white/10 bg-white/5 p-6 transition hover:border-[color:var(--luna-200)]/35 hover:bg-white/[0.07]"
-          >
-            <div className="text-lg font-semibold">{item.title}</div>
-            <p className="mt-3 text-sm leading-7 text-white/68">{item.desc}</p>
-          </div>
-        ))}
-      </section>
-
-      <section
-        id="how-it-works"
-        className="rounded-3xl border border-white/10 bg-black/20 p-6 md:p-8"
-      >
-        <div className="max-w-2xl">
-          <div className="text-sm font-medium uppercase tracking-[0.18em] text-white/45">
-            How it works
-          </div>
-          <h2 className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">
-            Clear flow first. Optimization second.
-          </h2>
-          <p className="mt-4 text-white/68">
-            This split gives the product a much cleaner first impression and makes the actual
-            optimization workspace feel more focused.
-          </p>
-        </div>
-
-        <div className="mt-8 grid gap-4 md:grid-cols-2">
-          {STEPS.map((item) => (
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {FEATURES.map((item) => (
             <div
-              key={item.step}
-              className="rounded-2xl border border-white/10 bg-white/5 p-6"
+              key={item.title}
+              className="rounded-2xl border border-white/10 bg-white/5 p-6 transition hover:border-[color:var(--luna-200)]/35 hover:bg-white/[0.07]"
             >
-              <div className="text-xs font-semibold tracking-[0.2em] text-[color:var(--luna-200)]">
-                {item.step}
-              </div>
-              <div className="mt-2 text-xl font-semibold">{item.title}</div>
+              <div className="text-lg font-semibold">{item.title}</div>
               <p className="mt-3 text-sm leading-7 text-white/68">{item.desc}</p>
             </div>
           ))}
-        </div>
-      </section>
+        </section>
 
-      <section className="rounded-3xl border border-white/10 bg-white/5 p-8 text-center">
-        <h3 className="text-2xl font-semibold tracking-tight md:text-3xl">
-          Ready to move into the optimization workspace?
-        </h3>
-        <p className="mx-auto mt-4 max-w-2xl text-white/68">
-          Use the dedicated page for upload, context, generation, and results.
-        </p>
-        <div className="mt-6">
-          <Link
-            href="/optimize"
-            className="inline-flex rounded-xl bg-[color:var(--luna-200)] px-5 py-3 font-semibold text-[#001018] transition hover:bg-[color:var(--luna-100)]"
+        <section
+          id="how-it-works"
+          className="rounded-3xl border border-white/10 bg-black/20 p-6 md:p-8"
+        >
+          <div className="max-w-2xl">
+            <div className="text-sm font-medium uppercase tracking-[0.18em] text-white/45">
+              How it works
+            </div>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">
+              Clear flow first. Optimization second.
+            </h2>
+            <p className="mt-4 text-white/68">
+              This split gives the product a much cleaner first impression and makes the actual
+              optimization workspace feel more focused.
+            </p>
+          </div>
+
+          <div className="mt-8 grid gap-4 md:grid-cols-2">
+            {STEPS.map((item) => (
+              <div
+                key={item.step}
+                className="rounded-2xl border border-white/10 bg-white/5 p-6"
+              >
+                <div className="text-xs font-semibold tracking-[0.2em] text-[color:var(--luna-200)]">
+                  {item.step}
+                </div>
+                <div className="mt-2 text-xl font-semibold">{item.title}</div>
+                <p className="mt-3 text-sm leading-7 text-white/68">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-white/10 bg-white/5 p-8 text-center">
+          <h3 className="text-2xl font-semibold tracking-tight md:text-3xl">
+            Ready to move into the optimization workspace?
+          </h3>
+          <p className="mx-auto mt-4 max-w-2xl text-white/68">
+            Use the dedicated page for upload, context, generation, and results.
+          </p>
+          <div className="mt-6">
+            <Link
+              href="/optimize"
+              className="inline-flex rounded-xl bg-[color:var(--luna-200)] px-5 py-3 font-semibold text-[#001018] transition hover:bg-[color:var(--luna-100)]"
+            >
+              Open optimization workspace
+            </Link>
+          </div>
+        </section>
+
+        {/* ── Disclaimer ── */}
+        <section className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.04] p-5 flex items-start gap-4">
+          <span className="text-lg shrink-0 mt-0.5">⚠</span>
+          <div>
+            <p className="text-sm font-semibold text-amber-300 mb-1">
+              Disclaimer — please review all AI-generated content before use
+            </p>
+            <p className="text-sm leading-7 text-white/45">
+              This tool uses AI to suggest LinkedIn profile content based on your resume. Outputs may
+              contain inaccuracies, embellishments, or misrepresentations. Always verify facts, dates,
+              job titles, and metrics before publishing. Never claim skills or experience you do not
+              have. The author accepts no liability for how this content is used.
+            </p>
+          </div>
+        </section>
+
+        {/* ── Contact CTA ── */}
+        <section className="rounded-3xl border border-[color:var(--luna-200)]/30 bg-[color:var(--luna-400)]/10 p-8 flex flex-wrap items-center justify-between gap-5">
+          <div>
+            <h3 className="text-xl font-semibold tracking-tight">
+              Need help optimizing your LinkedIn or resume?
+            </h3>
+            <p className="mt-2 text-sm text-white/55 leading-7">
+              Reach out directly and I can help you craft a standout profile.
+            </p>
+          </div>
+          <a
+            href="mailto:piyusha.2510@gmail.com"
+            className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-[color:var(--luna-200)] px-5 py-3 font-semibold text-[#001018] transition hover:bg-[color:var(--luna-100)]"
           >
-            Open optimization workspace
-          </Link>
+            <span>✉</span> Email me
+          </a>
+        </section>
+      </main>
+
+      {/* ── Footer ── */}
+      <footer className="mt-12 border-t border-white/[0.07] py-6 flex flex-wrap items-center justify-between gap-4 text-sm text-white/30">
+        <p>© {new Date().getFullYear()} Piyusha Sayal. All rights reserved.</p>
+        <div className="flex items-center gap-6">
+          <a
+            href="https://piyushasayal.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 transition hover:text-white/70"
+          >
+            <span>◈</span> Portfolio
+          </a>
+          <a
+            href="https://linkedin.com/in/piyusha-sayal"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 transition hover:text-white/70"
+          >
+            <span className="text-[color:var(--luna-200)]">in</span> LinkedIn
+          </a>
+          <a
+            href="mailto:piyusha.2510@gmail.com"
+            className="flex items-center gap-1.5 transition hover:text-white/70"
+          >
+            <span>✉</span> Email me
+          </a>
         </div>
-      </section>
-    </main>
+      </footer>
+    </>
   );
 }

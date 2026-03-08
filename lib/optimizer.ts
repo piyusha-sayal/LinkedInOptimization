@@ -37,150 +37,163 @@ import {
 } from "./sessionStore";
 import { createLLMClient } from "./aiClient";
 
+// ─── Config ─────────────────────────────────────────────────────────────────
+
 const DEFAULT_MODE: OptimizeMode = "Branding";
+const REQUEST_DELAY_MS = Number(process.env.LLM_REQUEST_DELAY_MS ?? 2000);
 
-const REQUEST_DELAY_MS = Number(process.env.LLM_REQUEST_DELAY_MS || 3200);
+// Model tiers — override via env
+const MODEL_STRUCTURE =
+  process.env.NOVA_STRUCTURE_MODEL ?? "nova-2-lite-v1";
+const MODEL_CHEAP =
+  process.env.NOVA_GENERATION_MODEL ?? "nova-2-lite-v1";
+const MODEL_RICH =
+  process.env.NOVA_RICH_MODEL ?? "nova-2-lite-v1";
 
-const NOVA_STRUCTURE_MODEL =
-  process.env.NOVA_STRUCTURE_MODEL || "nova-2-lite-v1";
+// Token budgets — tuned per section
+const TOKEN_BUDGETS: Record<SectionKey | "structuring", number> = {
+  structuring:      3200, // raised — resumes with 5+ roles + skills need 2500–3200 tokens
+  headline:          120,
+  about:             600,
+  experience:        350, // per role
+  skills:            300,
+  certifications:    600, // raised from 200 — 3-5 cert objects with all fields needs ~500 tokens
+  projects:          700, // raised — LinkedIn project fields: name, description, skills, dates, association
+  banner_tagline:     60,
+  positioning_advice: 700,
+};
 
-const NOVA_GENERATION_MODEL =
-  process.env.NOVA_GENERATION_MODEL || "nova-2-lite-v1";
-
-const NOVA_RICH_MODEL =
-  process.env.NOVA_RICH_MODEL || "nova-2-lite-v1";
+// ─── Utilities ───────────────────────────────────────────────────────────────
 
 function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((res) => setTimeout(res, ms));
 }
 
 async function pace() {
-  if (REQUEST_DELAY_MS > 0) {
-    await sleep(REQUEST_DELAY_MS);
-  }
+  if (REQUEST_DELAY_MS > 0) await sleep(REQUEST_DELAY_MS);
 }
 
 function resolveMode(mode?: string): OptimizeMode {
-  if (mode === "Branding" || mode === "Recruiter" || mode === "Executive") {
+  if (mode === "Branding" || mode === "Recruiter" || mode === "Executive")
     return mode;
-  }
   return DEFAULT_MODE;
 }
 
-function modesToGenerate(ctx: UserContext): OptimizeMode[] {
-  return [resolveMode(ctx.mode)];
-}
+// ─── Sanitizers ──────────────────────────────────────────────────────────────
 
-function cleanString(value: unknown, maxLen = 4000): string {
+function clean(value: unknown, maxLen = 4000): string {
   return String(value ?? "")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, maxLen);
 }
 
-function cleanStringArray(
-  value: unknown,
-  maxItems = 20,
-  maxLen = 300
-): string[] {
+function cleanArr(value: unknown, maxItems = 20, maxLen = 300): string[] {
   if (!Array.isArray(value)) return [];
   return value
-    .map((item) => cleanString(item, maxLen))
+    .map((item) => clean(item, maxLen))
     .filter(Boolean)
     .slice(0, maxItems);
 }
 
 function sanitizeStructuredResume(input: unknown): StructuredResume {
   const src =
-    input && typeof input === "object" ? (input as Record<string, any>) : {};
+    input && typeof input === "object" ? (input as Record<string, unknown>) : {};
 
-  const basics =
+  const rawBasics =
     src.basics && typeof src.basics === "object"
-      ? {
-          name: cleanString(src.basics.name, 200),
-          email: cleanString(src.basics.email, 200),
-          phone: cleanString(src.basics.phone, 80),
-          location: cleanString(src.basics.location, 200),
-          linkedin: cleanString(src.basics.linkedin, 300),
-          github: cleanString(src.basics.github, 300),
-          portfolio: cleanString(src.basics.portfolio, 300),
-          summary: cleanString(src.basics.summary, 1200),
-        }
+      ? (src.basics as Record<string, unknown>)
       : {};
 
+  const basics = {
+    name: clean(rawBasics.name, 200),
+    email: clean(rawBasics.email, 200),
+    phone: clean(rawBasics.phone, 80),
+    location: clean(rawBasics.location, 200),
+    linkedin: clean(rawBasics.linkedin, 300),
+    github: clean(rawBasics.github, 300),
+    portfolio: clean(rawBasics.portfolio, 300),
+    summary: clean(rawBasics.summary, 1200),
+  };
+
   const experience = Array.isArray(src.experience)
-    ? src.experience.slice(0, 10).map((item: any) => ({
-        company: cleanString(item?.company, 200),
-        title: cleanString(item?.title, 200),
-        startDate: cleanString(item?.startDate, 50) || undefined,
-        endDate: cleanString(item?.endDate, 50) || undefined,
-        location: cleanString(item?.location, 200) || undefined,
-        bullets: cleanStringArray(item?.bullets, 4, 240),
-      }))
+    ? src.experience.slice(0, 10).map((item: unknown) => {
+        const r = (item ?? {}) as Record<string, unknown>;
+        return {
+          company: clean(r.company, 200),
+          title: clean(r.title, 200),
+          startDate: clean(r.startDate, 50) || undefined,
+          endDate: clean(r.endDate, 50) || undefined,
+          location: clean(r.location, 200) || undefined,
+          bullets: cleanArr(r.bullets, 5, 280),
+        };
+      })
     : [];
 
   const education = Array.isArray(src.education)
-    ? src.education.slice(0, 8).map((item: any) => ({
-        school: cleanString(item?.school, 200),
-        degree: cleanString(item?.degree, 200) || undefined,
-        field: cleanString(item?.field, 200) || undefined,
-        startDate: cleanString(item?.startDate, 50) || undefined,
-        endDate: cleanString(item?.endDate, 50) || undefined,
-        location: cleanString(item?.location, 200) || undefined,
-      }))
+    ? src.education.slice(0, 6).map((item: unknown) => {
+        const e = (item ?? {}) as Record<string, unknown>;
+        return {
+          school: clean(e.school, 200),
+          degree: clean(e.degree, 200) || undefined,
+          field: clean(e.field, 200) || undefined,
+          startDate: clean(e.startDate, 50) || undefined,
+          endDate: clean(e.endDate, 50) || undefined,
+          location: clean(e.location, 200) || undefined,
+        };
+      })
     : [];
 
-  const skills = cleanStringArray(src.skills, 40, 120);
+  const skills = cleanArr(src.skills, 50, 120);
 
   const certifications = Array.isArray(src.certifications)
-    ? src.certifications.slice(0, 12).map((item: any) => ({
-        name: cleanString(item?.name ?? item, 200),
-        issuer: cleanString(item?.issuer, 200) || undefined,
-        issueDate: cleanString(item?.issueDate, 50) || undefined,
-        credentialId: cleanString(item?.credentialId, 100) || undefined,
-        credentialUrl: cleanString(item?.credentialUrl, 300) || undefined,
-      }))
+    ? src.certifications.slice(0, 15).map((item: unknown) => {
+        const c = (item ?? {}) as Record<string, unknown>;
+        return {
+          name: clean(c.name ?? c, 200),
+          issuer: clean(c.issuer, 200) || undefined,
+          issueDate: clean(c.issueDate, 50) || undefined,
+          credentialId: clean(c.credentialId, 100) || undefined,
+          credentialUrl: clean(c.credentialUrl, 300) || undefined,
+        };
+      })
     : [];
 
   const projects = Array.isArray(src.projects)
-    ? src.projects.slice(0, 8).map((item: any) => ({
-        name: cleanString(item?.name, 200),
-        description: cleanString(item?.description, 1200) || undefined,
-        tech: cleanStringArray(item?.tech, 12, 100),
-        link: cleanString(item?.link, 300) || undefined,
-      }))
+    ? src.projects.slice(0, 8).map((item: unknown) => {
+        const p = (item ?? {}) as Record<string, unknown>;
+        return {
+          name: clean(p.name, 200),
+          description: clean(p.description, 1500) || undefined,
+          tech: cleanArr(p.tech, 15, 100),
+          link: clean(p.link, 300) || undefined,
+        };
+      })
     : [];
 
-  return {
-    basics,
-    experience,
-    education,
-    skills,
-    certifications,
-    projects,
-  };
+  return { basics, experience, education, skills, certifications, projects };
 }
 
 function sanitizeRole(
   generated: Partial<ResumeRole> | undefined,
   fallback: ResumeRole
 ): ResumeRole {
+  const bullets = Array.isArray(generated?.bullets) && generated!.bullets.length
+    ? generated!.bullets
+    : fallback.bullets;
+
+  const generatedSkills = Array.isArray(generated?.skills) && generated!.skills.length
+    ? (generated!.skills as string[]).slice(0, 8)
+    : Array.isArray(fallback.skills) ? fallback.skills.slice(0, 8) : [];
+
   return {
-    company: cleanString(generated?.company || fallback.company, 200),
-    title: cleanString(generated?.title || fallback.title, 200),
-    location:
-      cleanString(generated?.location || fallback.location, 200) || undefined,
-    startDate:
-      cleanString(generated?.startDate || fallback.startDate, 50) || undefined,
-    endDate:
-      cleanString(generated?.endDate || fallback.endDate, 50) || undefined,
-    bullets: cleanStringArray(
-      Array.isArray(generated?.bullets) && generated.bullets.length
-        ? generated.bullets
-        : fallback.bullets,
-      2,
-      220
-    ),
+    company:   clean(fallback.company, 200), // Always preserve original
+    title:     clean(fallback.title, 200),   // Always preserve original
+    location:  clean(generated?.location || fallback.location, 200) || undefined,
+    startDate: clean(fallback.startDate, 50) || undefined,
+    endDate:   clean(fallback.endDate, 50) || undefined,
+    bullets:   cleanArr(bullets, 3, 280),
+    skills:    generatedSkills.length ? generatedSkills : undefined,
   };
 }
 
@@ -188,18 +201,18 @@ function mergeContext(
   existing: UserContext,
   overrides?: Partial<UserContext>
 ): UserContext {
-  const next = overrides || {};
-
+  const next = overrides ?? {};
   return {
-    targetRole: cleanString(next.targetRole ?? existing.targetRole, 160),
-    industry: cleanString(next.industry ?? existing.industry, 120) || undefined,
+    targetRole: clean(next.targetRole ?? existing.targetRole, 160),
+    industry: clean(next.industry ?? existing.industry, 120) || undefined,
     seniority: (next.seniority || existing.seniority) as UserContext["seniority"],
     mode: resolveMode(next.mode || existing.mode),
     targetJobText:
-      cleanString(next.targetJobText ?? existing.targetJobText, 2500) ||
-      undefined,
+      clean(next.targetJobText ?? existing.targetJobText, 2500) || undefined,
   };
 }
+
+// ─── Section Generators ───────────────────────────────────────────────────────
 
 async function rewriteExperienceSeparately(
   llm: ReturnType<typeof createLLMClient>,
@@ -207,150 +220,127 @@ async function rewriteExperienceSeparately(
   ctx: UserContext,
   mode: OptimizeMode
 ): Promise<ResumeRole[]> {
-  const richModel = NOVA_RICH_MODEL;
-  const sourceRoles = (structured.experience || []).slice(0, 4);
+  const sourceRoles = (structured.experience || []).slice(0, 5);
   const rewritten: ResumeRole[] = [];
 
   for (const role of sourceRoles) {
-    const rolePrompt = generateSingleExperienceRolePrompt(
-      role,
-      structured,
-      ctx,
-      mode
-    );
-
-    const roleOut = await llm.generateJSON<ResumeRole>({
-      model: richModel,
-      instructions: SYSTEM_INSTRUCTIONS,
-      input: rolePrompt.userPrompt,
-      maxOutputTokens: 220,
-      temperature: 0,
-    });
-
-    rewritten.push(sanitizeRole(roleOut, role));
+    try {
+      const spec = generateSingleExperienceRolePrompt(role, structured, ctx, mode);
+      const roleOut = await llm.generateJSON<Partial<ResumeRole>>({
+        model: MODEL_RICH,
+        instructions: SYSTEM_INSTRUCTIONS,
+        input: spec.userPrompt,
+        maxOutputTokens: TOKEN_BUDGETS.experience,
+        temperature: 0.1,
+      });
+      rewritten.push(sanitizeRole(roleOut, role));
+    } catch (err) {
+      // Graceful degradation: keep original role on failure
+      console.warn(`[optimizer] Experience role rewrite failed for "${role.title}", keeping original. Error: ${err}`);
+      rewritten.push(role);
+    }
     await pace();
   }
 
   return rewritten;
 }
 
-async function generateSectionData(
+export async function generateSectionData(
   llm: ReturnType<typeof createLLMClient>,
   structured: StructuredResume,
   ctx: UserContext,
   section: SectionKey
 ): Promise<unknown> {
   const mode = resolveMode(ctx.mode);
-  const cheapModel = NOVA_GENERATION_MODEL;
-  const richModel = NOVA_RICH_MODEL;
 
   switch (section) {
     case "headline": {
-      const prompt = generateHeadlinePrompt(structured, ctx, mode);
+      const spec = generateHeadlinePrompt(structured, ctx, mode);
       const out = await llm.generateText({
-        model: cheapModel,
-        instructions: `${SYSTEM_INSTRUCTIONS}\nReturn plain text only. No JSON.`,
-        input: prompt.userPrompt,
-        maxOutputTokens: 90,
-        temperature: 0,
+        model: MODEL_CHEAP,
+        instructions: `${SYSTEM_INSTRUCTIONS}\nReturn plain text only. No JSON. No quotes.`,
+        input: spec.userPrompt,
+        maxOutputTokens: TOKEN_BUDGETS.headline,
+        temperature: 0.15,
       });
-      return cleanString(out, 220);
+      // Strip quotes if model wraps output
+      return clean(out.replace(/^["']|["']$/g, ""), 220);
     }
 
     case "about": {
-      const prompt = generateAboutPrompt(structured, ctx, mode);
+      const spec = generateAboutPrompt(structured, ctx, mode);
       const out = await llm.generateText({
-        model: richModel,
-        instructions: `${SYSTEM_INSTRUCTIONS}\nReturn plain text only. No JSON.`,
-        input: prompt.userPrompt,
-        maxOutputTokens: 320,
-        temperature: 0,
+        model: MODEL_RICH,
+        instructions: `${SYSTEM_INSTRUCTIONS}\nReturn plain text only. No JSON. No section headers.`,
+        input: spec.userPrompt,
+        maxOutputTokens: TOKEN_BUDGETS.about,
+        temperature: 0.2,
       });
-      return cleanString(out, 4000);
+      return clean(out, 5000);
     }
 
     case "experience": {
-      const experience = await rewriteExperienceSeparately(
-        llm,
-        structured,
-        ctx,
-        mode
-      );
-      return experience;
+      return await rewriteExperienceSeparately(llm, structured, ctx, mode);
     }
 
     case "skills": {
-      const prompt = generateSkillsPrompt(structured, ctx, mode);
-      const out = await llm.generateJSON<{ skills: string[] }>({
-        model: cheapModel,
+      const spec = generateSkillsPrompt(structured, ctx, mode);
+      const out = await llm.generateJSON<{ skills?: unknown[] }>({
+        model: MODEL_CHEAP,
         instructions: SYSTEM_INSTRUCTIONS,
-        input: prompt.userPrompt,
-        schemaName: prompt.schemaName,
-        schema: prompt.schema,
-        maxOutputTokens: 170,
+        input: spec.userPrompt,
+        maxOutputTokens: TOKEN_BUDGETS.skills,
         temperature: 0,
       });
-      return Array.isArray(out.skills) ? out.skills : [];
+      return Array.isArray(out?.skills) ? out.skills : [];
     }
 
     case "certifications": {
-      const prompt = generateCertificationsPrompt(structured, ctx, mode);
-      const out = await llm.generateJSON<{
-        certifications: BrandingVersion["certifications"];
-      }>({
-        model: cheapModel,
+      const spec = generateCertificationsPrompt(structured, ctx, mode);
+      const out = await llm.generateJSON<{ certifications?: unknown[] }>({
+        model: MODEL_CHEAP,
         instructions: SYSTEM_INSTRUCTIONS,
-        input: prompt.userPrompt,
-        schemaName: prompt.schemaName,
-        schema: prompt.schema,
-        maxOutputTokens: 120,
+        input: spec.userPrompt,
+        maxOutputTokens: TOKEN_BUDGETS.certifications,
         temperature: 0,
       });
-      return Array.isArray(out.certifications) ? out.certifications : [];
+      return Array.isArray(out?.certifications) ? out.certifications : [];
     }
 
     case "projects": {
-      const prompt = generateProjectsPrompt(structured, ctx, mode);
-      const out = await llm.generateJSON<{
-        projects: BrandingVersion["projects"];
-      }>({
-        model: richModel,
+      const spec = generateProjectsPrompt(structured, ctx, mode);
+      const out = await llm.generateJSON<{ projects?: unknown[] }>({
+        model: MODEL_RICH,
         instructions: SYSTEM_INSTRUCTIONS,
-        input: prompt.userPrompt,
-        schemaName: prompt.schemaName,
-        schema: prompt.schema,
-        maxOutputTokens: 320,
-        temperature: 0,
+        input: spec.userPrompt,
+        maxOutputTokens: TOKEN_BUDGETS.projects,
+        temperature: 0.1,
       });
-      return Array.isArray(out.projects) ? out.projects : [];
+      return Array.isArray(out?.projects) ? out.projects : [];
     }
 
     case "banner_tagline": {
-      const prompt = generateBannerTaglinePrompt(structured, ctx, mode);
+      const spec = generateBannerTaglinePrompt(structured, ctx, mode);
       const out = await llm.generateText({
-        model: cheapModel,
-        instructions: `${SYSTEM_INSTRUCTIONS}\nReturn plain text only. No JSON.`,
-        input: prompt.userPrompt,
-        maxOutputTokens: 40,
-        temperature: 0,
+        model: MODEL_CHEAP,
+        instructions: `${SYSTEM_INSTRUCTIONS}\nReturn plain text only. No JSON. No quotes.`,
+        input: spec.userPrompt,
+        maxOutputTokens: TOKEN_BUDGETS.banner_tagline,
+        temperature: 0.25,
       });
-      return cleanString(out, 120);
+      return clean(out.replace(/^["']|["']$/g, ""), 120);
     }
 
     case "positioning_advice": {
-      const prompt = generatePositioningAdvicePrompt(structured, ctx, mode);
+      const spec = generatePositioningAdvicePrompt(structured, ctx, mode);
       const out = await llm.generateText({
-        model: richModel,
-        instructions: `${SYSTEM_INSTRUCTIONS}
-Return plain text only. No JSON.
-Keep the response concise but useful.
-Use short labeled sections.
-Do not use markdown code fences.`,
-        input: prompt.userPrompt,
-        maxOutputTokens: 420,
-        temperature: 0,
+        model: MODEL_RICH,
+        instructions: `${SYSTEM_INSTRUCTIONS}\nReturn plain text. Use the labeled sections specified. No JSON. No markdown fences.`,
+        input: spec.userPrompt,
+        maxOutputTokens: TOKEN_BUDGETS.positioning_advice,
+        temperature: 0.15,
       });
-      return cleanString(out, 7000);
+      return clean(out, 8000);
     }
 
     default:
@@ -358,58 +348,45 @@ Do not use markdown code fences.`,
   }
 }
 
+// ─── Full Mode Generation ─────────────────────────────────────────────────────
+
 async function generateOneMode(
   llm: ReturnType<typeof createLLMClient>,
   structured: StructuredResume,
   ctx: UserContext,
   mode: OptimizeMode
 ): Promise<ModeResult> {
-  const headline = (await generateSectionData(llm, structured, { ...ctx, mode }, "headline")) as string;
+  const modeCtx = { ...ctx, mode };
+
+  const headline = (await generateSectionData(llm, structured, modeCtx, "headline")) as string;
   await pace();
 
-  const about = (await generateSectionData(llm, structured, { ...ctx, mode }, "about")) as string;
+  const about = (await generateSectionData(llm, structured, modeCtx, "about")) as string;
   await pace();
 
-  const experience = (await generateSectionData(
-    llm,
-    structured,
-    { ...ctx, mode },
-    "experience"
-  )) as ResumeRole[];
-  await pace();
+  const experience = (await generateSectionData(llm, structured, modeCtx, "experience")) as ResumeRole[];
+  // pace() already called inside rewriteExperienceSeparately
 
-  const skills = (await generateSectionData(llm, structured, { ...ctx, mode }, "skills")) as string[];
+  const skills = (await generateSectionData(llm, structured, modeCtx, "skills")) as string[];
   await pace();
 
   const certifications = (await generateSectionData(
-    llm,
-    structured,
-    { ...ctx, mode },
-    "certifications"
+    llm, structured, modeCtx, "certifications"
   )) as BrandingVersion["certifications"];
   await pace();
 
   const projects = (await generateSectionData(
-    llm,
-    structured,
-    { ...ctx, mode },
-    "projects"
+    llm, structured, modeCtx, "projects"
   )) as BrandingVersion["projects"];
   await pace();
 
-  const bannerTagline = (await generateSectionData(
-    llm,
-    structured,
-    { ...ctx, mode },
-    "banner_tagline"
+  const banner_tagline = (await generateSectionData(
+    llm, structured, modeCtx, "banner_tagline"
   )) as string;
   await pace();
 
-  const positioningAdvice = (await generateSectionData(
-    llm,
-    structured,
-    { ...ctx, mode },
-    "positioning_advice"
+  const positioning_advice = (await generateSectionData(
+    llm, structured, modeCtx, "positioning_advice"
   )) as string;
 
   const profile: BrandingVersion = {
@@ -419,40 +396,36 @@ async function generateOneMode(
     skills,
     certifications,
     projects,
-    banner_tagline: bannerTagline,
+    banner_tagline,
   };
 
-  const keywords = analyzeKeywords(structured, profile, { ...ctx, mode });
+  const keywords = analyzeKeywords(structured, profile, modeCtx);
   const score = scoreOptimization(profile, keywords);
 
-  return {
-    mode,
-    profile,
-    keywords,
-    score,
-    positioning_advice: positioningAdvice,
-  };
+  return { mode, profile, keywords, score, positioning_advice };
 }
 
-export async function parseResumeSession(
-  file: UploadedFile,
-  ctx: UserContext
-) {
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+/**
+ * Step 1: Parse resume and create session.
+ * Returns session id + structured profile preview.
+ */
+export async function parseResumeSession(file: UploadedFile, ctx: UserContext) {
   const llm = createLLMClient();
 
   const parsed = await parseResumeToStructuredJSON(file);
-  const structuringPrompt = generateResumeStructuringPrompt(parsed.cleanedText);
+  const structuringSpec = generateResumeStructuringPrompt(parsed.cleanedText);
 
   const structuredRaw = await llm.generateJSON<StructuredResume>({
-    model: NOVA_STRUCTURE_MODEL,
+    model: MODEL_STRUCTURE,
     instructions: SYSTEM_INSTRUCTIONS,
-    input: structuringPrompt.userPrompt,
-    maxOutputTokens: 1400,
+    input: structuringSpec.userPrompt,
+    maxOutputTokens: TOKEN_BUDGETS.structuring,
     temperature: 0,
   });
 
   const structured = sanitizeStructuredResume(structuredRaw);
-
   const sessionId = crypto.randomUUID();
   const mergedCtx = mergeContext(ctx, {});
 
@@ -475,33 +448,33 @@ export async function parseResumeSession(
   };
 }
 
+/**
+ * Step 2: Generate a single section using the parsed session.
+ * Context overrides are merged so the user can change mode/role between calls.
+ */
 export async function optimizeSectionFromSession(
   id: string,
   section: SectionKey,
   overrides?: Partial<UserContext>
 ) {
   const session = getParseSession(id);
-  if (!session) {
-    throw new Error("Session not found or expired.");
-  }
+  if (!session) throw new Error("Session not found or expired. Please re-parse your resume.");
 
   const llm = createLLMClient();
   const mergedCtx = mergeContext(session.ctx, overrides);
 
+  // Persist context updates to session
   updateParseSession(id, { ctx: mergedCtx });
 
   const data = await generateSectionData(llm, session.structured, mergedCtx, section);
   putSectionResult(id, section, data);
 
-  return {
-    section,
-    data,
-  };
+  return { section, data };
 }
 
 /**
- * Legacy bulk pipeline kept for compatibility.
- * The new UI should prefer parseResumeSession + optimizeSectionFromSession.
+ * Legacy bulk pipeline (kept for /api/optimize compatibility).
+ * Prefer the parse+section-by-section flow for new UI.
  */
 export async function runOptimizationPipeline(
   file: UploadedFile,
@@ -510,32 +483,25 @@ export async function runOptimizationPipeline(
   const llm = createLLMClient();
 
   const parsed = await parseResumeToStructuredJSON(file);
-  const structuringPrompt = generateResumeStructuringPrompt(parsed.cleanedText);
+  const structuringSpec = generateResumeStructuringPrompt(parsed.cleanedText);
 
   const structuredRaw = await llm.generateJSON<StructuredResume>({
-    model: NOVA_STRUCTURE_MODEL,
+    model: MODEL_STRUCTURE,
     instructions: SYSTEM_INSTRUCTIONS,
-    input: structuringPrompt.userPrompt,
-    maxOutputTokens: 1400,
+    input: structuringSpec.userPrompt,
+    maxOutputTokens: TOKEN_BUDGETS.structuring,
     temperature: 0,
   });
 
   const structured = sanitizeStructuredResume(structuredRaw);
   await pace();
 
-  const modes = modesToGenerate(ctx);
+  const mode = resolveMode(ctx.mode);
+  const modeResult = await generateOneMode(llm, structured, { ...ctx, mode }, mode);
 
-  const perMode: ModeResult[] = [];
-  for (const m of modes) {
-    const result = await generateOneMode(llm, structured, { ...ctx, mode: m }, m);
-    perMode.push(result);
-    await pace();
-  }
-
-  const results: OptimizeResponse["results"] = {};
-  for (const item of perMode) {
-    results[item.mode] = item;
-  }
+  const results: OptimizeResponse["results"] = {
+    [mode]: modeResult,
+  };
 
   const resp: OptimizeResponse = {
     id: crypto.randomUUID(),
@@ -544,7 +510,7 @@ export async function runOptimizationPipeline(
     recruiter_version: results.Recruiter?.profile,
     executive_version: results.Executive?.profile,
     meta: {
-      model: `${NOVA_STRUCTURE_MODEL} | ${NOVA_GENERATION_MODEL} | ${NOVA_RICH_MODEL}`,
+      model: `${MODEL_STRUCTURE} | ${MODEL_CHEAP} | ${MODEL_RICH}`,
       createdAt: new Date().toISOString(),
     },
   };
