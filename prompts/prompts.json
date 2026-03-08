@@ -1,0 +1,21 @@
+{
+  "systems": {
+    "json": "Return valid JSON only. No markdown. No extra keys. Do not invent facts. Omit unknown scalar fields. Use empty arrays for missing lists.",
+    "copy": "Write concise, specific, recruiter-readable copy. No fluff, no emojis, no fabricated claims or metrics.",
+    "visual": "Write short, production-ready image prompts. Keep them realistic, professional, clean, and role-relevant."
+  },
+  "tasks": {
+    "resume_structuring": "Extract resume facts into JSON with keys: basics, experience, education, skills, projects, certifications. Do not guess dates, companies, links, or metrics.",
+    "headline": "Generate 3 LinkedIn headlines under 220 characters. Put role-relevant keywords early. Return {\"headlines\":[]}.",
+    "about": "Generate one concise and one full LinkedIn About section from the structured profile. Return {\"about_short\":\"\",\"about_full\":\"\"}.",
+    "experience": "Rewrite each role into 3 to 5 concise impact bullets. Preserve company, title, and dates exactly when present. Return JSON only.",
+    "skills": "Return 25 to 40 high-signal skills relevant to the target role. No duplicates. Return {\"skills\":[]}.",
+    "certifications": "Normalize and reorder certifications already present in the profile. Return {\"certifications\":[]}.",
+    "projects": "Rewrite only existing projects for clarity and impact without inventing metrics. Return {\"projects\":[]}.",
+    "banner_tagline": "Generate 3 short LinkedIn banner taglines. Return {\"taglines\":[]}.",
+    "positioning_advice": "Return concise positioning advice with keys: angle, proof_points, keyword_strategy, de_emphasize, next_steps, outreach_pitch.",
+    "profile_photo": "Write one prompt to transform the uploaded selfie into a realistic LinkedIn headshot while preserving identity. Return {\"prompt\":\"\"}.",
+    "cover_image": "Write one prompt for a premium LinkedIn cover banner with empty space on the left, no text, no faces, no logos. Return {\"prompt\":\"\"}.",
+    "cover_copy": "Suggest banner copy. Return {\"headline\":\"\",\"points\":[],\"cta\":\"\",\"style\":\"\"}."
+  }
+}
