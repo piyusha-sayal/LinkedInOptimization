@@ -1,6 +1,6 @@
 // app/api/ats-score/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/sessionStore"; // adjust to your actual session store import
+import { getParseSession } from "@/lib/sessionStore";
 import { runAI } from "@/lib/aiClient";
 import {
   scoreResumeDeterministic,
@@ -8,6 +8,8 @@ import {
   mergeKeywordScore,
   type ATSScoreResult,
 } from "@/lib/atsScorer";
+
+export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,16 +26,19 @@ export async function POST(req: NextRequest) {
     }
 
     // Load the parsed resume from session
-    const session = await getSession(sessionId);
+    const session = getParseSession(sessionId);
     if (!session?.structured) {
-      return NextResponse.json({ error: "Session not found or resume not parsed" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Session not found or resume not parsed" },
+        { status: 404 }
+      );
     }
 
     const ctx = {
-      targetRole: targetRole || session.context?.targetRole || "",
-      targetJobText: targetJobText || session.context?.targetJobText || "",
-      industry: session.context?.industry || "",
-      seniority: session.context?.seniority || "Mid",
+      targetRole:    targetRole    || session.ctx?.targetRole    || "",
+      targetJobText: targetJobText || session.ctx?.targetJobText || "",
+      industry:      session.ctx?.industry  || "",
+      seniority:     session.ctx?.seniority || "Mid",
     };
 
     // Step 1: Fast deterministic pass
@@ -49,34 +54,37 @@ export async function POST(req: NextRequest) {
     let finalResult: ATSScoreResult = deterministicResult;
 
     try {
-      const aiRaw = await runAI({
-        systemPrompt:
+      const aiResult = await runAI<{
+        keywordScore?: number;
+        found?: string[];
+        missing?: string[];
+        keywordNotes?: string;
+      }>({
+        system:
           "You are an ATS keyword analysis engine. Return only valid compact JSON. No markdown, no code fences.",
-        userPrompt: keywordPrompt,
+        prompt: keywordPrompt,
         maxTokens: 600,
-        model: process.env.MODEL_CHEAP || "llama-3.1-8b-instant",
       });
 
-      // Parse AI response
-      const jsonMatch = aiRaw.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        if (
-          typeof parsed.keywordScore === "number" &&
-          Array.isArray(parsed.found) &&
-          Array.isArray(parsed.missing)
-        ) {
-          finalResult = mergeKeywordScore(deterministicResult, {
-            keywordScore: parsed.keywordScore,
-            found: parsed.found,
-            missing: parsed.missing,
-            keywordNotes: parsed.keywordNotes || "",
-          });
-        }
+      if (
+        aiResult.ok &&
+        typeof aiResult.data?.keywordScore === "number" &&
+        Array.isArray(aiResult.data?.found) &&
+        Array.isArray(aiResult.data?.missing)
+      ) {
+        finalResult = mergeKeywordScore(deterministicResult, {
+          keywordScore:  aiResult.data.keywordScore,
+          found:         aiResult.data.found,
+          missing:       aiResult.data.missing,
+          keywordNotes:  aiResult.data.keywordNotes || "",
+        });
       }
     } catch (aiErr) {
-      // AI keyword pass failed — return deterministic result only, don't error out
-      console.warn("[ats-score] AI keyword pass failed, returning deterministic score:", aiErr);
+      // AI keyword pass failed — return deterministic result only
+      console.warn(
+        "[ats-score] AI keyword pass failed, returning deterministic score:",
+        aiErr
+      );
     }
 
     return NextResponse.json({ score: finalResult });
