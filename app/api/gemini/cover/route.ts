@@ -33,9 +33,10 @@ export async function POST() {
 
     return NextResponse.json({ image });
   } catch (e: any) {
-  console.error("COVER ERROR:", e);
-  return NextResponse.json(
-    { error: e?.message || "GeminiGen cover generation failed" },
-    { status: 500 }
-  );
-}
+    console.error("COVER ERROR:", e);
+    return NextResponse.json(
+      { error: e?.message || "GeminiGen cover generation failed" },
+      { status: 500 }
+    );
+  }  // ← closes try/catch
+}    // ← closes POST function
