@@ -9,6 +9,7 @@ import {
   type ATSScoreResult,
 } from "@/lib/atsScorer";
 
+
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
