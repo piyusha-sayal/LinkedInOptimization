@@ -2,8 +2,30 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 type PromptKey = "profile_photo" | "cover_image";
+type JsonRecord = Record<string, unknown>;
 
 let PROMPTS_CACHE: Record<string, unknown> | null = null;
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null;
+}
+
+function getPath(value: unknown, pathParts: Array<string | number>): unknown {
+  let current: unknown = value;
+
+  for (const part of pathParts) {
+    if (typeof part === "number") {
+      if (!Array.isArray(current) || part >= current.length) return undefined;
+      current = current[part];
+      continue;
+    }
+
+    if (!isRecord(current) || !(part in current)) return undefined;
+    current = current[part];
+  }
+
+  return current;
+}
 
 export async function resolvePromptsFile(): Promise<string> {
   const envPath = (process.env.PROMPTS_PATH || "").trim();
@@ -68,19 +90,19 @@ function toDataUrl(base64: string, mimeType = "image/png") {
   return `data:${mimeType};base64,${cleaned}`;
 }
 
-export function extractErrorMessage(payload: any): string {
+export function extractErrorMessage(payload: unknown): string {
   if (!payload) return "GeminiGen request failed.";
 
   if (typeof payload === "string") return payload;
 
   const candidates = [
-    payload?.error?.message,
-    payload?.error?.details?.[0]?.message,
-    payload?.error?.details?.[0]?.reason,
-    payload?.error,
-    payload?.message,
-    payload?.detail,
-    payload?.details,
+    getPath(payload, ["error", "message"]),
+    getPath(payload, ["error", "details", 0, "message"]),
+    getPath(payload, ["error", "details", 0, "reason"]),
+    getPath(payload, ["error"]),
+    getPath(payload, ["message"]),
+    getPath(payload, ["detail"]),
+    getPath(payload, ["details"]),
   ];
 
   for (const candidate of candidates) {
@@ -96,7 +118,9 @@ export function extractErrorMessage(payload: any): string {
   }
 }
 
-export async function callGeminiGen(payload: Record<string, unknown>) {
+export async function callGeminiGen(
+  payload: Record<string, unknown>
+): Promise<unknown> {
   const apiKey =
     (process.env.GEMINIGEN_API_KEY || "").trim() ||
     (process.env.GEMINI_API_KEY || "").trim();
@@ -122,7 +146,7 @@ export async function callGeminiGen(payload: Record<string, unknown>) {
 
   const raw = await res.text();
 
-  let data: any = null;
+  let data: unknown = null;
   try {
     data = raw ? JSON.parse(raw) : {};
   } catch {
@@ -140,20 +164,20 @@ export async function callGeminiGen(payload: Record<string, unknown>) {
   return data;
 }
 
-export function extractGeminiGenImage(payload: any): string | null {
+export function extractGeminiGenImage(payload: unknown): string | null {
   const directStringCandidates = [
-    payload?.image,
-    payload?.url,
-    payload?.data?.image,
-    payload?.data?.url,
-    payload?.result?.image,
-    payload?.result?.url,
-    payload?.output?.image,
-    payload?.output?.url,
-    Array.isArray(payload?.images) ? payload.images[0]?.image : null,
-    Array.isArray(payload?.images) ? payload.images[0]?.url : null,
-    Array.isArray(payload?.data) ? payload.data[0]?.image : null,
-    Array.isArray(payload?.data) ? payload.data[0]?.url : null,
+    getPath(payload, ["image"]),
+    getPath(payload, ["url"]),
+    getPath(payload, ["data", "image"]),
+    getPath(payload, ["data", "url"]),
+    getPath(payload, ["result", "image"]),
+    getPath(payload, ["result", "url"]),
+    getPath(payload, ["output", "image"]),
+    getPath(payload, ["output", "url"]),
+    getPath(payload, ["images", 0, "image"]),
+    getPath(payload, ["images", 0, "url"]),
+    getPath(payload, ["data", 0, "image"]),
+    getPath(payload, ["data", 0, "url"]),
   ];
 
   for (const value of directStringCandidates) {
@@ -164,36 +188,68 @@ export function extractGeminiGenImage(payload: any): string | null {
 
   const base64Candidates: Array<{ value: unknown; mimeType?: string }> = [
     {
-      value: payload?.base64,
-      mimeType: payload?.mimeType || payload?.contentType,
+      value: getPath(payload, ["base64"]),
+      mimeType:
+        typeof getPath(payload, ["mimeType"]) === "string"
+          ? (getPath(payload, ["mimeType"]) as string)
+          : typeof getPath(payload, ["contentType"]) === "string"
+          ? (getPath(payload, ["contentType"]) as string)
+          : undefined,
     },
     {
-      value: payload?.imageBase64,
-      mimeType: payload?.mimeType || payload?.contentType,
+      value: getPath(payload, ["imageBase64"]),
+      mimeType:
+        typeof getPath(payload, ["mimeType"]) === "string"
+          ? (getPath(payload, ["mimeType"]) as string)
+          : typeof getPath(payload, ["contentType"]) === "string"
+          ? (getPath(payload, ["contentType"]) as string)
+          : undefined,
     },
     {
-      value: payload?.data?.base64,
-      mimeType: payload?.data?.mimeType || payload?.data?.contentType,
+      value: getPath(payload, ["data", "base64"]),
+      mimeType:
+        typeof getPath(payload, ["data", "mimeType"]) === "string"
+          ? (getPath(payload, ["data", "mimeType"]) as string)
+          : typeof getPath(payload, ["data", "contentType"]) === "string"
+          ? (getPath(payload, ["data", "contentType"]) as string)
+          : undefined,
     },
     {
-      value: payload?.data?.imageBase64,
-      mimeType: payload?.data?.mimeType || payload?.data?.contentType,
+      value: getPath(payload, ["data", "imageBase64"]),
+      mimeType:
+        typeof getPath(payload, ["data", "mimeType"]) === "string"
+          ? (getPath(payload, ["data", "mimeType"]) as string)
+          : typeof getPath(payload, ["data", "contentType"]) === "string"
+          ? (getPath(payload, ["data", "contentType"]) as string)
+          : undefined,
     },
     {
-      value: Array.isArray(payload?.images) ? payload.images[0]?.base64 : null,
-      mimeType: Array.isArray(payload?.images) ? payload.images[0]?.mimeType : undefined,
+      value: getPath(payload, ["images", 0, "base64"]),
+      mimeType:
+        typeof getPath(payload, ["images", 0, "mimeType"]) === "string"
+          ? (getPath(payload, ["images", 0, "mimeType"]) as string)
+          : undefined,
     },
     {
-      value: Array.isArray(payload?.images) ? payload.images[0]?.imageBase64 : null,
-      mimeType: Array.isArray(payload?.images) ? payload.images[0]?.mimeType : undefined,
+      value: getPath(payload, ["images", 0, "imageBase64"]),
+      mimeType:
+        typeof getPath(payload, ["images", 0, "mimeType"]) === "string"
+          ? (getPath(payload, ["images", 0, "mimeType"]) as string)
+          : undefined,
     },
     {
-      value: Array.isArray(payload?.data) ? payload.data[0]?.base64 : null,
-      mimeType: Array.isArray(payload?.data) ? payload.data[0]?.mimeType : undefined,
+      value: getPath(payload, ["data", 0, "base64"]),
+      mimeType:
+        typeof getPath(payload, ["data", 0, "mimeType"]) === "string"
+          ? (getPath(payload, ["data", 0, "mimeType"]) as string)
+          : undefined,
     },
     {
-      value: Array.isArray(payload?.data) ? payload.data[0]?.imageBase64 : null,
-      mimeType: Array.isArray(payload?.data) ? payload.data[0]?.mimeType : undefined,
+      value: getPath(payload, ["data", 0, "imageBase64"]),
+      mimeType:
+        typeof getPath(payload, ["data", 0, "mimeType"]) === "string"
+          ? (getPath(payload, ["data", 0, "mimeType"]) as string)
+          : undefined,
     },
   ];
 

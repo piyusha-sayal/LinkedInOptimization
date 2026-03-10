@@ -1,52 +1,55 @@
-"use client";
-
 import type { OptimizationScore } from "@/lib/types";
 
-export function ScoreDashboard({ score }: { score: OptimizationScore }) {
-  const bars: { label: string; val: number }[] = [
-    { label: "Headline", val: score.breakdown.headline },
-    { label: "About", val: score.breakdown.about },
-    { label: "Experience", val: score.breakdown.experience },
-    { label: "Skills", val: score.breakdown.skills },
-  ];
+type ScoreDashboardProps = {
+  score: OptimizationScore;
+};
 
-  const factors = Object.entries(score.factors);
+const LABELS: Record<keyof OptimizationScore["breakdown"], string> = {
+  headline: "Headline",
+  about: "About",
+  experience: "Experience",
+  skills: "Skills",
+};
+
+export function ScoreDashboard({ score }: ScoreDashboardProps) {
+  const factors = Object.entries(score.breakdown) as Array<
+    [keyof OptimizationScore["breakdown"], number]
+  >;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <div className="rounded-2xl border border-white/10 bg-[color:var(--card)] p-6">
-        <div className="text-lg font-semibold">Overall Score</div>
-        <div className="mt-2 text-5xl font-bold text-red-500">{score.overall}</div>
-        <div className="mt-2 text-sm text-gray-400">Weighted across keywords, impact, clarity, completeness.</div>
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+        <div className="mb-2 text-sm text-white/60">Overall Score</div>
+        <div className="text-4xl font-semibold text-white">{score.overall}</div>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-[color:var(--card)] p-6">
-        <div className="text-lg font-semibold">Section Breakdown</div>
-        <div className="mt-4 space-y-3">
-          {bars.map((b) => (
-            <div key={b.label}>
-              <div className="flex justify-between text-sm text-gray-300">
-                <span>{b.label}</span><span>{b.val}</span>
-              </div>
-              <div className="mt-1 h-2 w-full rounded-full bg-white/10 overflow-hidden">
-                <div className="h-full bg-red-500" style={{ width: `${b.val}%` }} />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+        <div className="mb-4 text-sm text-white/60">Breakdown</div>
 
-      <div className="lg:col-span-2 rounded-2xl border border-white/10 bg-[color:var(--card)] p-6">
-        <div className="text-lg font-semibold">Factor Signals</div>
-        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-          {factors.map(([k, v]) => (
-            <div key={k} className="rounded-xl border border-white/10 bg-black/30 p-4">
-              <div className="text-sm text-gray-400">{k}</div>
-              <div className="text-xl font-semibold">{v}</div>
-            </div>
-          ))}
+        <div className="space-y-4">
+          {factors.map(([key, value]) => {
+            const pct = Math.max(0, Math.min(100, value));
+
+            return (
+              <div key={key}>
+                <div className="mb-1 flex items-center justify-between text-sm">
+                  <span className="text-white/80">{LABELS[key]}</span>
+                  <span className="text-white/60">{value}</span>
+                </div>
+
+                <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full rounded-full bg-blue-500"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
   );
 }
+
+export default ScoreDashboard;

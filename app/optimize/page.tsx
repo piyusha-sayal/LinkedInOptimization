@@ -415,8 +415,8 @@ function scoreResumeDeterministic(structured: StructuredResume, targetRole: stri
   const summary = overallScore >= 80
     ? `Strong ATS profile.${criticalCount ? ` Fix ${criticalCount} critical issue(s) to reach tier A.` : " Focus on keyword density to maximise recruiter ranking."}`
     : overallScore >= 60
-    ? `Solid foundation with gaps. ${criticalCount} critical issue(s) need fixing before applying.`
-    : `Significant ATS issues detected. ${criticalCount} critical — start there before applying to roles.`;
+      ? `Solid foundation with gaps. ${criticalCount} critical issue(s) need fixing before applying.`
+      : `Significant ATS issues detected. ${criticalCount} critical — start there before applying to roles.`;
 
   return { overallScore, grade, categories, issues, keywordsFound, keywordsMissing, summary };
 }
@@ -626,6 +626,7 @@ function SectionCard({
   const isDone = state.status === "success";
   const isLoading = state.status === "loading";
   const isError = state.status === "error";
+  const hasData = state.data !== undefined && state.data !== null;
   const [expanded, setExpanded] = useState(isDone);
 
   const statusColors = {
@@ -730,7 +731,7 @@ function SectionCard({
           {busy ? "Generating..." : isDone ? "Regenerate" : "Generate"}
         </button>
 
-        {state.data && (
+        {hasData && (
           <button
             onClick={() => onCopy(item.key)}
             style={{
@@ -749,7 +750,7 @@ function SectionCard({
           </button>
         )}
 
-        {isDone && state.data && (
+        {isDone && hasData && (
           <button
             onClick={() => setExpanded((x) => !x)}
             style={{
@@ -775,7 +776,7 @@ function SectionCard({
         </div>
       )}
 
-      {state.data && (
+      {hasData && (
         <div style={{ maxHeight: expanded ? 320 : 0, overflow: "hidden", transition: "max-height 0.4s cubic-bezier(0.4,0,0.2,1)" }}>
           <pre
             style={{
@@ -798,7 +799,7 @@ function SectionCard({
         </div>
       )}
 
-      {!state.data && state.status === "idle" && <div style={{ height: 4 }} />}
+      {!hasData && state.status === "idle" && <div style={{ height: 4 }} />}
     </div>
   );
 }

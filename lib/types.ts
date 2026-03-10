@@ -43,6 +43,7 @@ export type ResumeRole = {
   startDate?: string;
   endDate?: string;
   bullets: string[];
+  skills?: string[];
 };
 
 export type ResumeEducation = {

@@ -8,6 +8,23 @@ type Props = {
   initialCoverUrl?: string;
 };
 
+type ApiResponse = Record<string, unknown>;
+
+function getErrorMessage(data: unknown, fallback: string): string {
+  if (typeof data === "string" && data.trim()) return data;
+
+  if (typeof data === "object" && data !== null) {
+    const record = data as Record<string, unknown>;
+    const error = record.error;
+    const message = record.message;
+
+    if (typeof error === "string" && error.trim()) return error;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+
+  return fallback;
+}
+
 async function downloadResizedImage(opts: {
   src: string;
   fileName: string;
@@ -63,10 +80,10 @@ async function downloadResizedImage(opts: {
   URL.revokeObjectURL(url);
 }
 
-async function parseApiResponse(res: Response) {
+async function parseApiResponse(res: Response): Promise<ApiResponse> {
   const raw = await res.text();
 
-  let data: any = null;
+  let data: unknown = null;
   try {
     data = raw ? JSON.parse(raw) : {};
   } catch {
@@ -78,14 +95,11 @@ async function parseApiResponse(res: Response) {
 
   if (!res.ok) {
     throw new Error(
-      data?.error ||
-        data?.message ||
-        raw ||
-        `Request failed with status ${res.status}`
+      getErrorMessage(data, raw || `Request failed with status ${res.status}`)
     );
   }
 
-  return data;
+  return typeof data === "object" && data !== null ? (data as ApiResponse) : {};
 }
 
 export function LinkedInImages({
@@ -118,7 +132,7 @@ export function LinkedInImages({
         body: JSON.stringify(payload),
         cache: "no-store",
       });
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Failed to persist image URLs:", error);
     }
   }
@@ -145,16 +159,19 @@ export function LinkedInImages({
       });
 
       const json = await parseApiResponse(res);
+      const image = typeof json.image === "string" ? json.image : "";
 
-      if (!json?.image) {
+      if (!image) {
         throw new Error("Profile photo route did not return an image.");
       }
 
-      setPhotoOut(json.image);
-      await persistImages({ profilePhotoUrl: json.image });
-    } catch (e: any) {
+      setPhotoOut(image);
+      await persistImages({ profilePhotoUrl: image });
+    } catch (e: unknown) {
+      const message =
+        e instanceof Error ? e.message : "Profile photo generation failed";
       console.error("Profile photo generation failed:", e);
-      alert(e?.message || "Profile photo generation failed");
+      alert(message);
     } finally {
       setLoadingPhoto(false);
     }
@@ -172,16 +189,19 @@ export function LinkedInImages({
       });
 
       const json = await parseApiResponse(res);
+      const image = typeof json.image === "string" ? json.image : "";
 
-      if (!json?.image) {
+      if (!image) {
         throw new Error("Cover route did not return an image.");
       }
 
-      setCoverOut(json.image);
-      await persistImages({ coverUrl: json.image });
-    } catch (e: any) {
+      setCoverOut(image);
+      await persistImages({ coverUrl: image });
+    } catch (e: unknown) {
+      const message =
+        e instanceof Error ? e.message : "Cover generation failed";
       console.error("Cover generation failed:", e);
-      alert(e?.message || "Cover generation failed");
+      alert(message);
     } finally {
       setLoadingCover(false);
     }
