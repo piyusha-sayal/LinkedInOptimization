@@ -9,11 +9,7 @@ function getHFClient() {
     throw new Error("Missing HF_TOKEN");
   }
 
-  // Official HF docs show image editing with fal-ai provider,
-  // and the JS SDK supports imageToImage.
-  return new InferenceClient(token, {
-    provider: "fal-ai",
-  });
+  return new InferenceClient(token);
 }
 
 export async function POST(req: Request) {
@@ -63,6 +59,7 @@ Requirements:
 
     const outputBlob = await hf.imageToImage({
       model: "Qwen/Qwen-Image-Edit",
+      provider: "fal-ai",
       inputs: inputBlob,
       parameters: {
         prompt,

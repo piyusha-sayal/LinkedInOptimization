@@ -32,11 +32,12 @@ export async function POST() {
     const image = await normalizeImageOutput(extracted);
 
     return NextResponse.json({ image });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error("COVER ERROR:", e);
-    return NextResponse.json(
-      { error: e?.message || "GeminiGen cover generation failed" },
-      { status: 500 }
-    );
-  }  // ← closes try/catch
-}    // ← closes POST function
+
+    const message =
+      e instanceof Error ? e.message : "GeminiGen cover generation failed";
+
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

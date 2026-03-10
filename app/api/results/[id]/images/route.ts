@@ -18,10 +18,10 @@ export async function POST(
     }
 
     return NextResponse.json({ ok: true, images: updated.images });
-  } catch (e: any) {
-    return NextResponse.json(
-      { error: e?.message || "Failed to save images" },
-      { status: 500 }
-    );
+  } catch (e: unknown) {
+    const message =
+      e instanceof Error ? e.message : "Failed to save images";
+
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
