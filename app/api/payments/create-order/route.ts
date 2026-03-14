@@ -5,6 +5,7 @@ export const runtime = "nodejs";
 
 type CreateOrderBody = {
   resultId?: string;
+  workspaceId?: string;
   feature?: string;
 };
 
@@ -21,7 +22,7 @@ type RazorpayOrderResponse = {
 
 const FEATURE_PRICING: Record<string, { amount: number; currency: string }> = {
   generate_all: {
-    amount: 9900, // ₹99.00 in paise
+    amount: 9900,
     currency: "INR",
   },
 };
@@ -64,10 +65,18 @@ export async function POST(req: Request) {
 
     const feature = (body.feature || "generate_all").trim();
     const resultId = (body.resultId || "").trim();
+    const workspaceId = (body.workspaceId || "").trim();
 
     if (!resultId) {
       return NextResponse.json(
         { ok: false, error: "Missing resultId." },
+        { status: 400 }
+      );
+    }
+
+    if (!workspaceId) {
+      return NextResponse.json(
+        { ok: false, error: "Missing workspaceId." },
         { status: 400 }
       );
     }
@@ -103,6 +112,7 @@ export async function POST(req: Request) {
       notes: {
         feature,
         resultId,
+        workspaceId,
         clerkUserId: userId,
       },
     };

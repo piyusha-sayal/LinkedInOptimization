@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth, useClerk } from "@clerk/nextjs";
 
@@ -134,6 +134,10 @@ type VerifyPaymentResponse = {
   error?: string;
 };
 
+type WorkspaceSummary = {
+  id: string;
+};
+
 declare global {
   interface Window {
     Razorpay?: new (options: RazorpayCheckoutOptions) => RazorpayCheckoutInstance;
@@ -147,7 +151,7 @@ const SECTION_ORDER: Array<{ key: SectionKey; title: string; desc: string; icon:
   { key: "about", title: "About", desc: "200-400 word summary that hooks and converts.", icon: "◎" },
   { key: "experience", title: "Experience", desc: "Rewrite role bullets with impact and strong action verbs.", icon: "◈" },
   { key: "skills", title: "Skills", desc: "25-40 keywords tuned to recruiter searches.", icon: "⬡" },
-  { key: "certifications", title: "Certifications", desc: "Normalize and reorder certificated by relevance.", icon: "✪" },
+  { key: "certifications", title: "Certifications", desc: "Normalize and reorder certifications by relevance.", icon: "✪" },
   { key: "projects", title: "Projects", desc: "Clarify tech stack, scope, and measurable outcome.", icon: "◧" },
   { key: "banner_tagline", title: "Banner Tagline", desc: "3-8 word tagline for your LinkedIn banner image.", icon: "▣" },
   { key: "positioning_advice", title: "Strategy", desc: "Full positioning angle, keyword plan, and outreach pitch.", icon: "⚡" },
@@ -171,6 +175,22 @@ function makeInitialSections(): Record<SectionKey, SectionState> {
     banner_tagline: { status: "idle" },
     positioning_advice: { status: "idle" },
   };
+}
+
+function normalizeSections(
+  input?: Partial<Record<SectionKey, SectionState>> | null
+): Record<SectionKey, SectionState> {
+  return {
+    ...makeInitialSections(),
+    ...(input || {}),
+  };
+}
+
+function countSuccessfulSections(
+  input?: Record<SectionKey, SectionState> | null
+): number {
+  if (!input) return 0;
+  return Object.values(input).filter((section) => section?.status === "success").length;
 }
 
 function prettyPrint(value: unknown): string {
@@ -207,6 +227,7 @@ function formatSectionOutput(section: SectionKey, data: unknown): string {
       ];
       const assigned = new Set<string>();
       const buckets: Record<string, string[]> = {};
+
       for (const [cat, re] of CATS) {
         const matched = skills.filter((s) => !assigned.has(s) && re.test(s));
         if (matched.length) {
@@ -214,83 +235,86 @@ function formatSectionOutput(section: SectionKey, data: unknown): string {
           matched.forEach((s) => assigned.add(s));
         }
       }
+
       const leftover = skills.filter((s) => !assigned.has(s));
       if (leftover.length) buckets["Other Skills"] = leftover;
+
       const lines: string[] = [];
       for (const [cat, items] of Object.entries(buckets)) {
         lines.push(cat + ":");
         lines.push(items.join("  •  "));
         lines.push("");
       }
+
       return lines.join("\n").trim();
     }
 
     case "certifications": {
-  if (!Array.isArray(data)) return prettyPrint(data);
-  const certifications = data as CertificationItem[];
+      if (!Array.isArray(data)) return prettyPrint(data);
+      const certifications = data as CertificationItem[];
 
-  return certifications
-    .map((c, i) => {
-      const certName = c.name?.trim() || "Certificate not provided";
-      const issuer = c.issuer?.trim() || "Issuer not provided";
+      return certifications
+        .map((c, i) => {
+          const certName = c.name?.trim() || "Certificate not provided";
+          const issuer = c.issuer?.trim() || "Issuer not provided";
+          const parts: string[] = [
+            "Certification " + (i + 1),
+            "Name: " + certName,
+            "Issued by: " + issuer,
+          ];
 
-      const parts: string[] = [
-        "Certification " + (i + 1),
-        "Name: " + certName,
-        "Issued by: " + issuer,
-      ];
+          const issued = [c.issueMonth, c.issueYear].filter(Boolean).join(" ");
+          if (issued) parts.push("Issue date: " + issued);
 
-      const issued = [c.issueMonth, c.issueYear].filter(Boolean).join(" ");
-      if (issued) parts.push("Issue date: " + issued);
+          const expiry = [c.expiryMonth, c.expiryYear].filter(Boolean).join(" ");
+          if (expiry) parts.push("Expiration: " + expiry);
 
-      const expiry = [c.expiryMonth, c.expiryYear].filter(Boolean).join(" ");
-      if (expiry) parts.push("Expiration: " + expiry);
+          if (c.credentialId) parts.push("Credential ID: " + c.credentialId);
+          if (c.credentialUrl) parts.push("Credential URL: " + c.credentialUrl);
 
-      if (c.credentialId) parts.push("Credential ID: " + c.credentialId);
-      if (c.credentialUrl) parts.push("Credential URL: " + c.credentialUrl);
-
-      return parts.join("\n");
-    })
-    .join("\n\n");
-}
+          return parts.join("\n");
+        })
+        .join("\n\n");
+    }
 
     case "projects": {
-  if (!Array.isArray(data)) return prettyPrint(data);
-  const projects = data as ProjectItem[];
+      if (!Array.isArray(data)) return prettyPrint(data);
+      const projects = data as ProjectItem[];
 
-  return projects
-    .map((p, i) => {
-      const projectName =
-        p.name?.trim() ||
-        p.associatedWith?.trim() ||
-        (p.description?.trim()
-          ? p.description.trim().split(".")[0].slice(0, 60)
-          : `Project ${i + 1}`);
+      return projects
+        .map((p, i) => {
+          const projectName =
+            p.name?.trim() ||
+            p.associatedWith?.trim() ||
+            (p.description?.trim()
+              ? p.description.trim().split(".")[0].slice(0, 60)
+              : `Project ${i + 1}`);
 
-      const parts: string[] = ["Project " + (i + 1) + ": " + projectName];
+          const parts: string[] = ["Project " + (i + 1) + ": " + projectName];
 
-      if (p.url) parts.push("URL: " + p.url);
-      if (p.description) parts.push("Description:\n" + p.description);
-      if (Array.isArray(p.skills) && p.skills.length) {
-        parts.push("Skills (top 5): " + p.skills.slice(0, 5).join(", "));
-      }
+          if (p.url) parts.push("URL: " + p.url);
+          if (p.description) parts.push("Description:\n" + p.description);
 
-      const start = [p.startMonth, p.startYear].filter(Boolean).join(" ");
-      if (start) parts.push("Start date: " + start);
+          if (Array.isArray(p.skills) && p.skills.length) {
+            parts.push("Skills (top 5): " + p.skills.slice(0, 5).join(", "));
+          }
 
-      if (p.currentlyWorking) {
-        parts.push("Currently working: Yes");
-      } else {
-        const end = [p.endMonth, p.endYear].filter(Boolean).join(" ");
-        if (end) parts.push("End date: " + end);
-      }
+          const start = [p.startMonth, p.startYear].filter(Boolean).join(" ");
+          if (start) parts.push("Start date: " + start);
 
-      if (p.associatedWith) parts.push("Associated with: " + p.associatedWith);
+          if (p.currentlyWorking) {
+            parts.push("Currently working: Yes");
+          } else {
+            const end = [p.endMonth, p.endYear].filter(Boolean).join(" ");
+            if (end) parts.push("End date: " + end);
+          }
 
-      return parts.join("\n");
-    })
-    .join("\n\n");
-}
+          if (p.associatedWith) parts.push("Associated with: " + p.associatedWith);
+
+          return parts.join("\n");
+        })
+        .join("\n\n");
+    }
 
     case "experience": {
       if (!Array.isArray(data)) return prettyPrint(data);
@@ -407,6 +431,7 @@ function scoreResumeDeterministic(structured: StructuredResume, targetRole: stri
   const avgLen = allBullets.length
     ? allBullets.reduce((s, b) => s + b.split(/\s+/).length, 0) / allBullets.length
     : 0;
+
   if (avgLen > 35) {
     fmt -= 5;
     issues.push({
@@ -435,20 +460,33 @@ function scoreResumeDeterministic(structured: StructuredResume, targetRole: stri
   categories.push({ label: "Formatting", score: Math.max(0, fmt), max: 20 });
 
   let impact = 20;
-  const WEAK = ["responsible for", "helped", "assisted", "worked on", "involved in", "participated in", "supported", "contributed to"];
-  const weakCount = allBullets.filter((b) => WEAK.some((w) => b.toLowerCase().startsWith(w))).length;
+  const WEAK = [
+    "responsible for",
+    "helped",
+    "assisted",
+    "worked on",
+    "involved in",
+    "participated in",
+    "supported",
+    "contributed to",
+  ];
+  const weakCount = allBullets.filter((b) =>
+    WEAK.some((w) => b.toLowerCase().startsWith(w))
+  ).length;
+
   if (weakCount) {
-    const p = Math.min(10, weakCount * 3);
-    impact -= p;
+    impact -= Math.min(10, weakCount * 3);
     issues.push({
       severity: weakCount >= 3 ? "critical" : "warning",
       message: `${weakCount} bullet(s) start with weak phrases like "Responsible for"`,
       fix: `Replace with strong past-tense verbs: "Automated", "Reduced", "Delivered", "Led", "Built".`,
     });
   }
+
   const metricRatio = allBullets.length
     ? allBullets.filter((b) => /\d+[\s%xX]|[$£€]\d|\d+[km+]/i.test(b)).length / allBullets.length
     : 0;
+
   if (metricRatio < 0.25 && allBullets.length >= 4) {
     impact -= 6;
     issues.push({
@@ -463,6 +501,7 @@ function scoreResumeDeterministic(structured: StructuredResume, targetRole: stri
   const roleWords = targetRole.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
   const titlesText = (structured.experience || []).map((r) => r.title?.toLowerCase() || "").join(" ");
   const matches = roleWords.filter((w) => titlesText.includes(w)).length;
+
   if (roleWords.length && matches < Math.ceil(roleWords.length / 2)) {
     align -= 6;
     issues.push({
@@ -483,7 +522,8 @@ function scoreResumeDeterministic(structured: StructuredResume, targetRole: stri
   const rawTotal = categories.reduce((s, c) => s + c.score, 0);
   const maxTotal = categories.reduce((s, c) => s + c.max, 0);
   const overallScore = Math.round((rawTotal / maxTotal) * 100);
-  const grade = overallScore >= 85 ? "A" : overallScore >= 70 ? "B" : overallScore >= 55 ? "C" : overallScore >= 40 ? "D" : "F";
+  const grade =
+    overallScore >= 85 ? "A" : overallScore >= 70 ? "B" : overallScore >= 55 ? "C" : overallScore >= 40 ? "D" : "F";
 
   const keywordsFound = (structured.skills || []).slice(0, 8);
   const COMMON_GAPS: Record<string, string[]> = {
@@ -501,11 +541,14 @@ function scoreResumeDeterministic(structured: StructuredResume, targetRole: stri
     : [];
 
   const criticalCount = issues.filter((i) => i.severity === "critical").length;
-  const summary = overallScore >= 80
-    ? `Strong ATS profile.${criticalCount ? ` Fix ${criticalCount} critical issue(s) to reach tier A.` : " Focus on keyword density to maximise recruiter ranking."}`
-    : overallScore >= 60
-      ? `Solid foundation with gaps. ${criticalCount} critical issue(s) need fixing before applying.`
-      : `Significant ATS issues detected. ${criticalCount} critical — start there before applying to roles.`;
+  const summary =
+    overallScore >= 80
+      ? `Strong ATS profile.${
+          criticalCount ? ` Fix ${criticalCount} critical issue(s) to reach tier A.` : " Focus on keyword density to maximise recruiter ranking."
+        }`
+      : overallScore >= 60
+        ? `Solid foundation with gaps. ${criticalCount} critical issue(s) need fixing before applying.`
+        : `Significant ATS issues detected. ${criticalCount} critical — start there before applying to roles.`;
 
   return { overallScore, grade, categories, issues, keywordsFound, keywordsMissing, summary };
 }
@@ -514,6 +557,7 @@ function scoreResumeDeterministic(structured: StructuredResume, targetRole: stri
 
 function AnimatedNumber({ to, duration = 900 }: { to: number; duration?: number }) {
   const [val, setVal] = useState(0);
+
   useEffect(() => {
     let cur = 0;
     const step = Math.max(1, Math.ceil(to / (duration / 16)));
@@ -522,8 +566,10 @@ function AnimatedNumber({ to, duration = 900 }: { to: number; duration?: number 
       setVal(cur);
       if (cur >= to) clearInterval(id);
     }, 16);
+
     return () => clearInterval(id);
   }, [to, duration]);
+
   return <>{val}</>;
 }
 
@@ -582,7 +628,9 @@ function CatBar({ cat, delay }: { cat: ATSCategory; delay: number }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "rgba(255,255,255,0.55)" }}>
         <span>{cat.label}</span>
-        <span style={{ fontFamily: "monospace" }}>{cat.score}/{cat.max}</span>
+        <span style={{ fontFamily: "monospace" }}>
+          {cat.score}/{cat.max}
+        </span>
       </div>
       <div style={{ height: 5, borderRadius: 99, background: "rgba(255,255,255,0.07)", overflow: "hidden" }}>
         <div
@@ -696,27 +744,27 @@ function SectionCard({
   state,
   busy,
   copiedSection,
-  activeSection,
-  onGenerate,
-  onCopy,
   queuePosition,
   genAllRunning,
+  onCopy,
 }: {
   item: typeof SECTION_ORDER[0];
   state: SectionState;
   busy: boolean;
   copiedSection: SectionKey | null;
-  activeSection: SectionKey | null;
-  onGenerate: (k: SectionKey) => void;
-  onCopy: (k: SectionKey) => void;
   queuePosition?: number | null;
   genAllRunning?: boolean;
+  onCopy: (k: SectionKey) => void;
 }) {
   const isDone = state.status === "success";
   const isLoading = state.status === "loading";
   const isError = state.status === "error";
   const hasData = state.data !== undefined && state.data !== null;
-  const [expanded, setExpanded] = useState(isDone);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    if (isDone) setExpanded(true);
+  }, [isDone]);
 
   const statusColors = {
     idle: { bg: "rgba(255,255,255,0.04)", text: "rgba(255,255,255,0.3)", border: "rgba(255,255,255,0.08)" },
@@ -724,6 +772,16 @@ function SectionCard({
     success: { bg: "rgba(34,197,94,0.08)", text: "#86efac", border: "rgba(34,197,94,0.25)" },
     error: { bg: "rgba(239,68,68,0.08)", text: "#fca5a5", border: "rgba(239,68,68,0.2)" },
   }[state.status];
+
+  const primaryLabel = busy
+    ? "Generating..."
+    : isDone
+      ? "Generated"
+      : genAllRunning
+        ? queuePosition && queuePosition > 0
+          ? `Queued #${queuePosition}`
+          : "Queued"
+        : "Included in Generate All";
 
   return (
     <div
@@ -766,16 +824,26 @@ function SectionCard({
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-          {genAllRunning && !busy && state.status !== "success" && queuePosition !== null && queuePosition !== undefined && queuePosition > 0 && (
-            <div style={{ padding: "3px 9px", borderRadius: 99, fontSize: 10, fontWeight: 600, background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)", color: "#fcd34d" }}>
-              #{queuePosition}
-            </div>
-          )}
-          {genAllRunning && !busy && state.status !== "success" && queuePosition !== null && queuePosition !== undefined && queuePosition <= 0 && queuePosition > -8 && (
-            <div style={{ padding: "3px 9px", borderRadius: 99, fontSize: 10, fontWeight: 600, background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", color: "#86efac" }}>
-              done
-            </div>
-          )}
+          {genAllRunning &&
+            !busy &&
+            state.status !== "success" &&
+            queuePosition !== null &&
+            queuePosition !== undefined &&
+            queuePosition > 0 && (
+              <div
+                style={{
+                  padding: "3px 9px",
+                  borderRadius: 99,
+                  fontSize: 10,
+                  fontWeight: 600,
+                  background: "rgba(245,158,11,0.1)",
+                  border: "1px solid rgba(245,158,11,0.25)",
+                  color: "#fcd34d",
+                }}
+              >
+                #{queuePosition}
+              </div>
+            )}
           <div
             style={{
               padding: "3px 10px",
@@ -802,22 +870,21 @@ function SectionCard({
 
       <div style={{ display: "flex", gap: 8, padding: "0 20px 16px", flexWrap: "wrap" }}>
         <button
-          onClick={() => onGenerate(item.key)}
-          disabled={!!activeSection}
+          disabled
           style={{
             padding: "8px 18px",
             borderRadius: 10,
             fontSize: 13,
             fontWeight: 600,
-            cursor: activeSection ? "not-allowed" : "pointer",
-            background: busy ? "rgba(255,255,255,0.07)" : isDone ? "rgba(10,102,194,0.15)" : "linear-gradient(135deg," + LI_BLUE + ",#0077b5)",
-            border: busy ? "1px solid rgba(255,255,255,0.1)" : isDone ? "1px solid " + LI_BORDER : "none",
-            color: busy ? "rgba(255,255,255,0.35)" : isDone ? "#93c5fd" : "white",
-            boxShadow: !busy && !isDone ? "0 2px 14px rgba(10,102,194,0.35)" : "none",
+            cursor: "default",
+            background: busy ? "rgba(255,255,255,0.07)" : isDone ? "rgba(10,102,194,0.15)" : "rgba(255,255,255,0.05)",
+            border: "1px solid " + (isDone ? LI_BORDER : "rgba(255,255,255,0.1)"),
+            color: busy ? "rgba(255,255,255,0.5)" : isDone ? "#93c5fd" : "rgba(255,255,255,0.45)",
+            boxShadow: "none",
             transition: "all 0.2s",
           }}
         >
-          {busy ? "Generating..." : isDone ? "Regenerate" : "Generate"}
+          {primaryLabel}
         </button>
 
         {hasData && (
@@ -860,7 +927,17 @@ function SectionCard({
       </div>
 
       {state.error && (
-        <div style={{ margin: "0 20px 16px", padding: "10px 14px", borderRadius: 10, fontSize: 12, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#fca5a5" }}>
+        <div
+          style={{
+            margin: "0 20px 16px",
+            padding: "10px 14px",
+            borderRadius: 10,
+            fontSize: 12,
+            background: "rgba(239,68,68,0.08)",
+            border: "1px solid rgba(239,68,68,0.2)",
+            color: "#fca5a5",
+          }}
+        >
           {state.error}
         </div>
       )}
@@ -896,8 +973,10 @@ function SectionCard({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function OptimizePage() {
-  const router = useRouter();
-  const { isLoaded, isSignedIn} = useAuth();
+  const searchParams = useSearchParams();
+  const requestedWorkspaceId = (searchParams.get("workspaceId") || "").trim();
+
+  const { isLoaded, isSignedIn, userId } = useAuth();
   const { openSignIn } = useClerk();
 
   const [file, setFile] = useState<File | null>(null);
@@ -915,6 +994,7 @@ export default function OptimizePage() {
   const [parseLoading, setParseLoading] = useState(false);
   const [parseStep, setParseStep] = useState(0);
   const [parsedId, setParsedId] = useState<string>("");
+  const [workspaceId, setWorkspaceId] = useState<string>("");
   const [structured, setStructured] = useState<StructuredResume | null>(null);
   const [sections, setSections] = useState<Record<SectionKey, SectionState>>(makeInitialSections());
   const [activeSection, setActiveSection] = useState<SectionKey | null>(null);
@@ -931,11 +1011,25 @@ export default function OptimizePage() {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearing, setClearing] = useState(false);
 
+  const [genAllRunning, setGenAllRunning] = useState(false);
+  const [genAllIndex, setGenAllIndex] = useState<number>(-1);
+
   const resultsRef = useRef<HTMLDivElement>(null);
   const genAllAbort = useRef<boolean>(false);
+  const sectionsRef = useRef<Record<SectionKey, SectionState>>(sections);
 
   useEffect(() => {
-    setTimeout(() => setPageLoaded(true), 60);
+    sectionsRef.current = sections;
+  }, [sections]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("linkedup_sections_json", JSON.stringify(sections));
+  }, [sections]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setPageLoaded(true), 60);
+    return () => clearTimeout(t);
   }, []);
 
   useEffect(() => {
@@ -958,119 +1052,27 @@ export default function OptimizePage() {
     }
   }, [structured, ctx.targetRole]);
 
-useEffect(() => {
-  if (!isLoaded) return;
-
-  // Signed-out users should not restore old cached data,
-  // but should still be able to see results generated in the current session.
-  if (!isSignedIn) {
-    localStorage.removeItem("linkedup_workspace_id");
-    localStorage.removeItem("linkedup_parsed_id");
-    localStorage.removeItem("linkedup_structured_json");
-    localStorage.removeItem("linkedup_ctx_json");
-    return;
-  }
-
-  if (structured && parsedId) return;
-
-  const workspaceId = localStorage.getItem("linkedup_workspace_id");
-  const savedParsedId = localStorage.getItem("linkedup_parsed_id");
-  const savedStructuredJson = localStorage.getItem("linkedup_structured_json");
-  const savedCtxJson = localStorage.getItem("linkedup_ctx_json");
-
-  if (savedParsedId && !parsedId) {
-    setParsedId(savedParsedId);
-  }
-
-  if (!structured && savedStructuredJson) {
-    try {
-      setStructured(JSON.parse(savedStructuredJson) as StructuredResume);
-    } catch {
-      // ignore bad local cache
-    }
-  }
-
-  if (savedCtxJson) {
-    try {
-      setCtx(JSON.parse(savedCtxJson) as UserContext);
-    } catch {
-      // ignore bad local cache
-    }
-  }
-
-  if (!workspaceId || structured) return;
-
-  const restore = async () => {
-    try {
-      const data = await getWorkerWorkspace(workspaceId);
-
-      const structuredJson = data.workspace?.structured_json;
-      const ctxJson = data.workspace?.ctx_json;
-
-      if (structuredJson) {
-        const parsedStructured = JSON.parse(structuredJson) as StructuredResume;
-        setStructured(parsedStructured);
-        localStorage.setItem("linkedup_structured_json", structuredJson);
-      }
-
-      if (ctxJson) {
-        const parsedCtx = JSON.parse(ctxJson) as UserContext;
-        setCtx(parsedCtx);
-        localStorage.setItem("linkedup_ctx_json", ctxJson);
-      }
-    } catch {
-      // ignore restore failure for now
-    }
-  };
-
-  restore();
-}, [isLoaded, isSignedIn, structured, parsedId]);
-
-useEffect(() => {
-  if (!isLoaded || !isSignedIn) return;
-
-  const pendingGenerateAll = localStorage.getItem("linkedup_pending_generate_all");
-  if (pendingGenerateAll !== "1") return;
-
-  const pendingParsedId = localStorage.getItem("linkedup_pending_parsed_id");
-  const pendingStructuredJson = localStorage.getItem("linkedup_pending_structured_json");
-  const pendingCtxJson = localStorage.getItem("linkedup_pending_ctx_json");
-
-  if (!parsedId && pendingParsedId) {
-    setParsedId(pendingParsedId);
-    localStorage.setItem("linkedup_parsed_id", pendingParsedId);
-  }
-
-  if (!structured && pendingStructuredJson) {
-    try {
-      const parsedStructured = JSON.parse(pendingStructuredJson) as StructuredResume;
-      setStructured(parsedStructured);
-      localStorage.setItem("linkedup_structured_json", pendingStructuredJson);
-    } catch {
-      // ignore bad pending structured cache
-    }
-  }
-
-  if (pendingCtxJson) {
-    try {
-      const parsedCtx = JSON.parse(pendingCtxJson) as UserContext;
-      setCtx(parsedCtx);
-      localStorage.setItem("linkedup_ctx_json", pendingCtxJson);
-    } catch {
-      // ignore bad pending ctx cache
-    }
-  }
-}, [isLoaded, isSignedIn, parsedId, structured]);
+  // ─── Helpers ───────────────────────────────────────────────────────────────
 
   const topPreview = useMemo(() => (structured?.skills || []).slice(0, 10), [structured]);
   const doneCount = Object.values(sections).filter((s) => s.status === "success").length;
-
   const PARSE_STEPS = ["Uploading resume", "Extracting text", "Structuring profile"];
 
   function validateBeforeParse(): string | null {
     if (!file) return "Please upload a PDF or DOCX resume.";
     if (!ctx.targetRole.trim()) return "Target role is required.";
     return null;
+  }
+  function canGenerateFromCurrentState(): boolean {
+    return Boolean(parsedId || getCurrentWorkspaceId());
+  }
+  function getCurrentWorkspaceId(): string {
+    return (
+      requestedWorkspaceId ||
+      workspaceId ||
+      localStorage.getItem("linkedup_workspace_id") ||
+      ""
+    );
   }
 
   async function parseJsonOrThrow<T>(res: Response): Promise<T> {
@@ -1089,42 +1091,59 @@ useEffect(() => {
   }
 
   function savePendingGenerateAllIntent() {
-  if (typeof window === "undefined") return;
+    if (typeof window === "undefined") return;
 
-  localStorage.setItem("linkedup_pending_generate_all", "1");
+    localStorage.setItem("linkedup_pending_generate_all", "1");
 
-  if (parsedId) {
-    localStorage.setItem("linkedup_pending_parsed_id", parsedId);
+    if (parsedId) {
+      localStorage.setItem("linkedup_pending_parsed_id", parsedId);
+    }
+
+    if (structured) {
+      localStorage.setItem("linkedup_pending_structured_json", JSON.stringify(structured));
+    }
+
+    if (workspaceId) {
+      localStorage.setItem("linkedup_workspace_id", workspaceId);
+    }
+
+    localStorage.setItem("linkedup_pending_ctx_json", JSON.stringify(ctx));
   }
 
-  if (structured) {
-    localStorage.setItem(
-      "linkedup_pending_structured_json",
-      JSON.stringify(structured)
-    );
+  async function getLatestWorkspaceIdForUser(clerkUserId: string): Promise<string> {
+    const workerBase = process.env.NEXT_PUBLIC_LINKEDUP_WORKER_URL;
+    if (!workerBase) throw new Error("Missing NEXT_PUBLIC_LINKEDUP_WORKER_URL.");
+
+    const res = await fetch(`${workerBase}/workspaces?userId=${encodeURIComponent(clerkUserId)}`, {
+      method: "GET",
+      cache: "no-store",
+    });
+
+    const json = await res.json();
+
+    if (!res.ok || !json?.ok) {
+      throw new Error(json?.error || "Failed to load workspaces.");
+    }
+
+    const workspaces = (json.workspaces || []) as WorkspaceSummary[];
+    return workspaces[0]?.id || "";
   }
 
-  localStorage.setItem("linkedup_pending_ctx_json", JSON.stringify(ctx));
-}
-
-  async function getWorkerWorkspace(workspaceId: string): Promise<{
+  async function getWorkerWorkspace(currentWorkspaceId: string): Promise<{
     workspace: {
       structured_json?: string | null;
       ctx_json?: string | null;
+      section_results_json?: string | null;
+      is_paid?: number | boolean | null;
     };
   }> {
     const workerBase = process.env.NEXT_PUBLIC_LINKEDUP_WORKER_URL;
+    if (!workerBase) throw new Error("Missing NEXT_PUBLIC_LINKEDUP_WORKER_URL.");
 
-    if (!workerBase) {
-      throw new Error("Missing NEXT_PUBLIC_LINKEDUP_WORKER_URL.");
-    }
-
-    const res = await fetch(
-      `${workerBase}/workspace/get?id=${encodeURIComponent(workspaceId)}`,
-      {
-        method: "GET",
-      }
-    );
+    const res = await fetch(`${workerBase}/workspace/get?id=${encodeURIComponent(currentWorkspaceId)}`, {
+      method: "GET",
+      cache: "no-store",
+    });
 
     const json = await res.json();
 
@@ -1136,30 +1155,30 @@ useEffect(() => {
       workspace: {
         structured_json?: string | null;
         ctx_json?: string | null;
+        section_results_json?: string | null;
+        is_paid?: number | boolean | null;
       };
     };
   }
 
   async function saveParsedWorkspaceToWorker(
-    workspaceId: string,
+    currentWorkspaceId: string,
     structuredData: StructuredResume,
-    contextData: UserContext
+    contextData: UserContext,
+    sectionResults: Record<SectionKey, SectionState>
   ): Promise<void> {
     const workerBase = process.env.NEXT_PUBLIC_LINKEDUP_WORKER_URL;
-
-    if (!workerBase) {
-      throw new Error("Missing NEXT_PUBLIC_LINKEDUP_WORKER_URL.");
-    }
+    if (!workerBase) throw new Error("Missing NEXT_PUBLIC_LINKEDUP_WORKER_URL.");
 
     const res = await fetch(`${workerBase}/workspace/save-parsed`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        workspaceId,
+        workspaceId: currentWorkspaceId,
+        userId: userId || "",
         structured: structuredData,
         ctx: contextData,
+        sectionResults,
       }),
     });
 
@@ -1171,29 +1190,307 @@ useEffect(() => {
   }
 
   async function createWorkerWorkspace(uploadFile: File): Promise<string> {
-  const workerBase = process.env.NEXT_PUBLIC_LINKEDUP_WORKER_URL;
+    const workerBase = process.env.NEXT_PUBLIC_LINKEDUP_WORKER_URL;
+    if (!workerBase) throw new Error("Missing NEXT_PUBLIC_LINKEDUP_WORKER_URL.");
 
-  if (!workerBase) {
-    throw new Error("Missing NEXT_PUBLIC_LINKEDUP_WORKER_URL.");
+    const form = new FormData();
+    form.set("file", uploadFile);
+
+    if (userId) {
+      form.set("userId", userId);
+    }
+
+    const res = await fetch(`${workerBase}/resume/upload`, {
+      method: "POST",
+      body: form,
+    });
+
+    const json = await res.json();
+
+    if (!res.ok || !json?.ok || !json?.workspaceId) {
+      throw new Error(json?.error || "Failed to create workspace.");
+    }
+
+    return json.workspaceId as string;
   }
 
-  const form = new FormData();
-  form.set("file", uploadFile);
+  // ─── Restore workspace ─────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isLoaded) return;
+  
+    if (!isSignedIn) {
+      setWorkspaceId("");
+      setParsedId("");
+      setStructured(null);
+      setSections(makeInitialSections());
+      setIsGenerateAllUnlocked(false);
+  
+      localStorage.removeItem("linkedup_workspace_id");
+      localStorage.removeItem("linkedup_parsed_id");
+      localStorage.removeItem("linkedup_structured_json");
+      localStorage.removeItem("linkedup_ctx_json");
+      localStorage.removeItem("linkedup_sections_json");
+      return;
+    }
+  
+    let cancelled = false;
+  
+    const restore = async () => {
+      try {
+        const storedWorkspaceId = localStorage.getItem("linkedup_workspace_id") || "";
+        const isWorkspaceSwitch =
+          !!requestedWorkspaceId &&
+          !!storedWorkspaceId &&
+          requestedWorkspaceId !== storedWorkspaceId;
+  
+        let localParsedId = "";
+        let localStructured: StructuredResume | null = null;
+        let localCtx: UserContext | null = null;
+        let localSections = makeInitialSections();
+  
+        if (!isWorkspaceSwitch) {
+          const savedParsedId = localStorage.getItem("linkedup_parsed_id") || "";
+          const savedStructuredJson = localStorage.getItem("linkedup_structured_json");
+          const savedCtxJson = localStorage.getItem("linkedup_ctx_json");
+          const savedSectionsJson = localStorage.getItem("linkedup_sections_json");
+  
+          localParsedId = savedParsedId;
+  
+          if (savedStructuredJson) {
+            try {
+              localStructured = JSON.parse(savedStructuredJson) as StructuredResume;
+            } catch {
+              localStructured = null;
+            }
+          }
+  
+          if (savedCtxJson) {
+            try {
+              localCtx = JSON.parse(savedCtxJson) as UserContext;
+            } catch {
+              localCtx = null;
+            }
+          }
+  
+          if (savedSectionsJson) {
+            try {
+              localSections = normalizeSections(
+                JSON.parse(savedSectionsJson) as Partial<Record<SectionKey, SectionState>>
+              );
+            } catch {
+              localSections = makeInitialSections();
+            }
+          }
+        }
+  
+        let resolvedWorkspaceId =
+          requestedWorkspaceId ||
+          workspaceId ||
+          storedWorkspaceId ||
+          "";
+  
+        if (!resolvedWorkspaceId && userId) {
+          resolvedWorkspaceId = await getLatestWorkspaceIdForUser(userId);
+        }
+  
+        if (!resolvedWorkspaceId || cancelled) return;
+  
+        setWorkspaceId(resolvedWorkspaceId);
+        localStorage.setItem("linkedup_workspace_id", resolvedWorkspaceId);
+  
+        if (localParsedId) {
+          setParsedId(localParsedId);
+        } else {
+          setParsedId("");
+        }
+  
+        if (localStructured) {
+          setStructured(localStructured);
+        } else if (isWorkspaceSwitch) {
+          setStructured(null);
+        }
+  
+        if (localCtx) {
+          setCtx(localCtx);
+        }
+  
+        setSections(localSections);
+  
+        const data = await getWorkerWorkspace(resolvedWorkspaceId);
+        if (cancelled) return;
+  
+        const structuredJson = data.workspace?.structured_json;
+        const ctxJson = data.workspace?.ctx_json;
+        const sectionResultsJson = data.workspace?.section_results_json;
+        const isPaid = data.workspace?.is_paid;
+  
+        let effectiveStructured = localStructured;
+        let effectiveCtx: UserContext =
+          localCtx || {
+            targetRole: "",
+            industry: "",
+            seniority: "Mid",
+            mode: "Branding",
+            targetJobText: "",
+          };
+  
+        if (structuredJson) {
+          try {
+            effectiveStructured = JSON.parse(structuredJson) as StructuredResume;
+          } catch {
+            // keep local
+          }
+        }
+  
+        if (ctxJson) {
+          try {
+            effectiveCtx = JSON.parse(ctxJson) as UserContext;
+          } catch {
+            // keep local
+          }
+        }
+  
+        let remoteSections: Record<SectionKey, SectionState> | null = null;
+  
+        if (sectionResultsJson) {
+          try {
+            remoteSections = normalizeSections(
+              JSON.parse(sectionResultsJson) as Partial<Record<SectionKey, SectionState>>
+            );
+          } catch {
+            remoteSections = null;
+          }
+        }
+  
+        const localSuccess = countSuccessfulSections(localSections);
+        const remoteSuccess = countSuccessfulSections(remoteSections);
+  
+        const bestSections =
+          remoteSections && remoteSuccess >= localSuccess
+            ? remoteSections
+            : localSuccess > 0
+              ? localSections
+              : remoteSections || makeInitialSections();
+  
+        if (effectiveStructured) {
+          setStructured(effectiveStructured);
+          localStorage.setItem(
+            "linkedup_structured_json",
+            JSON.stringify(effectiveStructured)
+          );
+        }
+  
+        setCtx(effectiveCtx);
+        localStorage.setItem("linkedup_ctx_json", JSON.stringify(effectiveCtx));
+  
+        setSections(bestSections);
+        localStorage.setItem("linkedup_sections_json", JSON.stringify(bestSections));
+  
+        setIsGenerateAllUnlocked(Boolean(isPaid));
+  
+        if (
+          localSuccess > remoteSuccess &&
+          effectiveStructured &&
+          resolvedWorkspaceId
+        ) {
+          try {
+            await saveParsedWorkspaceToWorker(
+              resolvedWorkspaceId,
+              effectiveStructured,
+              effectiveCtx,
+              localSections
+            );
+          } catch (syncError) {
+            console.error(
+              "Failed to backfill richer local section results to worker:",
+              syncError
+            );
+          }
+        }
+      } catch (restoreError) {
+        console.error("Workspace restore failed:", restoreError);
+      }
+    };
+  
+    restore();
+  
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoaded, isSignedIn, userId, requestedWorkspaceId]);
 
-  const res = await fetch(`${workerBase}/resume/upload`, {
-    method: "POST",
-    body: form,
-  });
+  // ─── Pending generate-all intent after sign-in ─────────────────────────────
 
-  const json = await res.json();
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    if (!structured) return;
+    if (isPaymentLoading || isGenerateAllUnlocked || genAllRunning) return;
 
-  if (!res.ok || !json?.ok || !json?.workspaceId) {
-    throw new Error(json?.error || "Failed to create workspace.");
-  }
+    const pending = localStorage.getItem("linkedup_pending_generate_all");
+    if (pending !== "1") return;
 
-  return json.workspaceId as string;
-}
-    async function parseResume() {
+    const pendingParsedId = localStorage.getItem("linkedup_pending_parsed_id");
+    const pendingStructuredJson = localStorage.getItem("linkedup_pending_structured_json");
+    const pendingCtxJson = localStorage.getItem("linkedup_pending_ctx_json");
+    const savedWorkspaceId = localStorage.getItem("linkedup_workspace_id");
+
+    if (!parsedId && pendingParsedId) {
+      setParsedId(pendingParsedId);
+      localStorage.setItem("linkedup_parsed_id", pendingParsedId);
+    }
+
+    if (!structured && pendingStructuredJson) {
+      try {
+        const parsedStructured = JSON.parse(pendingStructuredJson) as StructuredResume;
+        setStructured(parsedStructured);
+        localStorage.setItem("linkedup_structured_json", pendingStructuredJson);
+      } catch {
+        // ignore bad cache
+      }
+    }
+
+    if (pendingCtxJson) {
+      try {
+        const parsedCtx = JSON.parse(pendingCtxJson) as UserContext;
+        setCtx(parsedCtx);
+        localStorage.setItem("linkedup_ctx_json", pendingCtxJson);
+      } catch {
+        // ignore bad cache
+      }
+    }
+
+    if (savedWorkspaceId && !workspaceId) {
+      setWorkspaceId(savedWorkspaceId);
+    }
+
+    const run = async () => {
+      try {
+        setApiErr(null);
+        setIsPaymentLoading(true);
+
+        const paid = await startGenerateAllPayment();
+        if (!paid) return;
+
+        localStorage.removeItem("linkedup_pending_generate_all");
+        localStorage.removeItem("linkedup_pending_parsed_id");
+        localStorage.removeItem("linkedup_pending_structured_json");
+        localStorage.removeItem("linkedup_pending_ctx_json");
+
+        setIsGenerateAllUnlocked(true);
+        await generateAll();
+      } catch (error: unknown) {
+        setApiErr(error instanceof Error ? error.message : "Payment failed. Please try again.");
+      } finally {
+        setIsPaymentLoading(false);
+      }
+    };
+
+    run();
+  }, [isLoaded, isSignedIn, parsedId, structured, workspaceId, isPaymentLoading, isGenerateAllUnlocked, genAllRunning]);
+
+  // ─── Actions ───────────────────────────────────────────────────────────────
+
+  async function parseResume() {
     setApiErr(null);
     setFileErr(null);
 
@@ -1207,10 +1504,17 @@ useEffect(() => {
     setParseLoading(true);
     setSections(makeInitialSections());
     setParsedId("");
+    setWorkspaceId("");
     setStructured(null);
     setAtsResult(null);
     setAtsRan(false);
     setIsGenerateAllUnlocked(false);
+    setGenAllRunning(false);
+    setGenAllIndex(-1);
+    setActiveSection(null);
+
+    localStorage.removeItem("linkedup_workspace_id");
+    localStorage.removeItem("linkedup_sections_json");
 
     try {
       const form = new FormData();
@@ -1219,6 +1523,7 @@ useEffect(() => {
       form.set("industry", (ctx.industry || "").trim());
       form.set("seniority", String(ctx.seniority as Seniority));
       form.set("mode", String((ctx.mode || "Branding") as OptimizeMode));
+
       if (ctx.targetJobText?.trim()) {
         form.set("targetJobText", ctx.targetJobText.trim());
       }
@@ -1234,19 +1539,19 @@ useEffect(() => {
       setStructured(out.structured);
 
       localStorage.setItem("linkedup_parsed_id", out.id);
-      localStorage.setItem(
-        "linkedup_structured_json",
-        JSON.stringify(out.structured)
-      );
+      localStorage.setItem("linkedup_structured_json", JSON.stringify(out.structured));
       localStorage.setItem("linkedup_ctx_json", JSON.stringify(ctx));
 
-      try {
-        const workspaceId = await createWorkerWorkspace(file as File);
-        localStorage.setItem("linkedup_workspace_id", workspaceId);
-        await saveParsedWorkspaceToWorker(workspaceId, out.structured, ctx);
-      } catch (workspaceError) {
-        console.error("Workspace save failed:", workspaceError);
-      }
+      const newWorkspaceId = await createWorkerWorkspace(file as File);
+      setWorkspaceId(newWorkspaceId);
+      localStorage.setItem("linkedup_workspace_id", newWorkspaceId);
+
+      await saveParsedWorkspaceToWorker(
+        newWorkspaceId,
+        out.structured,
+        ctx,
+        makeInitialSections()
+      );
 
       setTimeout(() => {
         resultsRef.current?.scrollIntoView({
@@ -1260,90 +1565,27 @@ useEffect(() => {
       setParseLoading(false);
     }
   }
-  async function generateSection(section: SectionKey) {
-    if (!parsedId) return;
-    setApiErr(null);
-    setActiveSection(section);
-    setSections((prev) => ({ ...prev, [section]: { ...prev[section], status: "loading", error: undefined } }));
-
-    try {
-      const res = await fetch("/api/optimize-section", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({
-  id: parsedId,
-  workspaceId: localStorage.getItem("linkedup_workspace_id") || "",
-  section,
-  targetRole: ctx.targetRole,
-  industry: ctx.industry,
-  seniority: ctx.seniority,
-  mode: ctx.mode || "Branding",
-  targetJobText: ctx.targetJobText || "",
-}),
-      });
-      const out = await parseJsonOrThrow<SectionResponse>(res);
-      setSections((prev) => ({ ...prev, [section]: { status: "success", data: out.data } }));
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : `Failed to generate ${section}.`;
-      setSections((prev) => ({ ...prev, [section]: { ...prev[section], status: "error", error: msg } }));
-      setApiErr(msg);
-    } finally {
-      setActiveSection(null);
-    }
-  }
 
   async function handleCopy(key: SectionKey) {
     await copySectionOutput(key, sections[key].data);
     setCopiedSection(key);
   }
 
-  const [genAllRunning, setGenAllRunning] = useState(false);
-  const [genAllIndex, setGenAllIndex] = useState<number>(-1);
-
-  useEffect(() => {
-  if (!isLoaded || !isSignedIn) return;
-  if (!parsedId || !structured) return;
-  if (isPaymentLoading || isGenerateAllUnlocked || genAllRunning) return;
-
-  const pending = localStorage.getItem("linkedup_pending_generate_all");
-  if (pending !== "1") return;
-
-  const run = async () => {
-    try {
-      setApiErr(null);
-      setIsPaymentLoading(true);
-
-      const paid = await startGenerateAllPayment();
-      if (!paid) return;
-
-      localStorage.removeItem("linkedup_pending_generate_all");
-      localStorage.removeItem("linkedup_pending_parsed_id");
-      localStorage.removeItem("linkedup_pending_structured_json");
-      localStorage.removeItem("linkedup_pending_ctx_json");
-
-      setIsGenerateAllUnlocked(true);
-      await generateAll();
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Payment failed. Please try again.";
-      setApiErr(message);
-    } finally {
-      setIsPaymentLoading(false);
-    }
-  };
-
-  run();
-}, [
-  isLoaded,
-  isSignedIn,
-  parsedId,
-  structured,
-  isPaymentLoading,
-  isGenerateAllUnlocked,
-  genAllRunning,
-]);
-
   async function startGenerateAllPayment(): Promise<boolean> {
+    if (!parsedId && !getCurrentWorkspaceId()) {
+      throw new Error("Workspace not ready. Please parse again.");
+    }
+
+    const currentWorkspaceId = getCurrentWorkspaceId();
+
+if (!currentWorkspaceId) {
+  throw new Error("Workspace not ready. Please parse your resume again.");
+}
+
+if (!workspaceId) {
+  setWorkspaceId(currentWorkspaceId);
+}
+
     const checkoutLoaded = await loadRazorpayScript();
     if (!checkoutLoaded || !window.Razorpay) {
       throw new Error("Razorpay Checkout failed to load.");
@@ -1366,6 +1608,7 @@ useEffect(() => {
       },
       body: JSON.stringify({
         resultId: parsedId,
+        workspaceId: currentWorkspaceId,
         feature: "generate_all",
       }),
     });
@@ -1421,6 +1664,7 @@ useEffect(() => {
               },
               body: JSON.stringify({
                 resultId: parsedId,
+                workspaceId: currentWorkspaceId,
                 feature: "generate_all",
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_order_id: response.razorpay_order_id,
@@ -1448,7 +1692,14 @@ useEffect(() => {
   }
 
   async function generateAll() {
-    if (!parsedId || genAllRunning) return;
+    const currentWorkspaceId = getCurrentWorkspaceId();
+
+    if (!currentWorkspaceId || genAllRunning) return;
+
+if (!workspaceId) {
+  setWorkspaceId(currentWorkspaceId);
+}
+
     genAllAbort.current = false;
     setGenAllRunning(true);
     setApiErr(null);
@@ -1457,12 +1708,21 @@ useEffect(() => {
 
     for (let i = 0; i < queue.length; i++) {
       if (genAllAbort.current) break;
+
       const section = queue[i];
-      if (sections[section]?.status === "success") continue;
+      if (sectionsRef.current[section]?.status === "success") continue;
 
       setGenAllIndex(i);
       setActiveSection(section);
-      setSections((prev) => ({ ...prev, [section]: { ...prev[section], status: "loading", error: undefined } }));
+
+      setSections((prev) => {
+        const next = {
+          ...prev,
+          [section]: { ...prev[section], status: "loading", error: undefined },
+        };
+        sectionsRef.current = next;
+        return next;
+      });
 
       try {
         const res = await fetch("/api/optimize-section", {
@@ -1470,7 +1730,7 @@ useEffect(() => {
           headers: { "Content-Type": "application/json", Accept: "application/json" },
           body: JSON.stringify({
             id: parsedId,
-            workspaceId: localStorage.getItem("linkedup_workspace_id") || "",
+            workspaceId: currentWorkspaceId,
             section,
             targetRole: ctx.targetRole,
             industry: ctx.industry,
@@ -1479,14 +1739,43 @@ useEffect(() => {
             targetJobText: ctx.targetJobText || "",
           }),
         });
+
         const out = await parseJsonOrThrow<SectionResponse>(res);
-        setSections((prev) => ({ ...prev, [section]: { status: "success", data: out.data } }));
+
+        let nextSections!: Record<SectionKey, SectionState>;
+        setSections((prev) => {
+          nextSections = {
+            ...prev,
+            [section]: { status: "success", data: out.data },
+          };
+          sectionsRef.current = nextSections;
+          return nextSections;
+        });
+
+        if (structured && nextSections) {
+          try {
+            await saveParsedWorkspaceToWorker(currentWorkspaceId, structured, ctx, nextSections);
+          } catch (workspaceError) {
+            console.error("Failed to persist section results:", workspaceError);
+          }
+        }
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Failed: " + section;
-        setSections((prev) => ({ ...prev, [section]: { ...prev[section], status: "error", error: msg } }));
+        const msg = e instanceof Error ? e.message : `Failed: ${section}`;
+
+        setSections((prev) => {
+          const next = {
+            ...prev,
+            [section]: { ...prev[section], status: "error", error: msg },
+          };
+          sectionsRef.current = next;
+          return next;
+        });
+
+        setApiErr(msg);
       }
 
       setActiveSection(null);
+
       if (i < queue.length - 1 && !genAllAbort.current) {
         await new Promise((r) => setTimeout(r, 1200));
       }
@@ -1509,6 +1798,22 @@ useEffect(() => {
       openSignIn?.();
       return;
     }
+
+    if (!canGenerateFromCurrentState()) {
+      setApiErr("Workspace not ready. Please parse your resume again.");
+      return;
+    }
+
+    const currentWorkspaceId = getCurrentWorkspaceId();
+
+if (!currentWorkspaceId) {
+  setApiErr("Workspace not ready. Please parse your resume again.");
+  return;
+}
+
+if (!workspaceId) {
+  setWorkspaceId(currentWorkspaceId);
+}
 
     if (isGenerateAllUnlocked) {
       await generateAll();
@@ -1542,6 +1847,7 @@ useEffect(() => {
 
   function refreshATS() {
     if (!structured) return;
+
     setAtsLoading(true);
     setTimeout(() => {
       setAtsResult(scoreResumeDeterministic(structured, ctx.targetRole));
@@ -1550,7 +1856,7 @@ useEffect(() => {
     }, 1200);
   }
 
-    async function handleStartOver() {
+  async function handleStartOver() {
     setClearing(true);
 
     try {
@@ -1562,7 +1868,7 @@ useEffect(() => {
         });
       }
     } catch {
-      // best-effort — clear local state regardless
+      // best-effort
     }
 
     setFile(null);
@@ -1576,6 +1882,7 @@ useEffect(() => {
       targetJobText: "",
     });
     setParsedId("");
+    setWorkspaceId("");
     setStructured(null);
     setSections(makeInitialSections());
     setActiveSection(null);
@@ -1596,6 +1903,7 @@ useEffect(() => {
     localStorage.removeItem("linkedup_pending_generate_all");
     localStorage.removeItem("linkedup_structured_json");
     localStorage.removeItem("linkedup_ctx_json");
+    localStorage.removeItem("linkedup_sections_json");
     localStorage.removeItem("linkedup_pending_parsed_id");
     localStorage.removeItem("linkedup_pending_structured_json");
     localStorage.removeItem("linkedup_pending_ctx_json");
@@ -1629,21 +1937,36 @@ useEffect(() => {
             overflow: "hidden",
           }}
         >
-          <div style={{ position: "absolute", top: -40, right: -40, width: 220, height: 220, borderRadius: "50%", background: LI_BLUE, opacity: 0.06, filter: "blur(60px)", pointerEvents: "none" }} />
+          <div
+            style={{
+              position: "absolute",
+              top: -40,
+              right: -40,
+              width: 220,
+              height: 220,
+              borderRadius: "50%",
+              background: LI_BLUE,
+              opacity: 0.06,
+              filter: "blur(60px)",
+              pointerEvents: "none",
+            }}
+          />
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 24, flexWrap: "wrap", position: "relative" }}>
             <div style={{ maxWidth: 600 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 12 }}>
                 <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px #22c55e", animation: "liBreathe 2.5s ease-in-out infinite" }} />
-                <span style={{ fontSize: 11, fontWeight: 600, color: "#22c55e", letterSpacing: "0.1em", textTransform: "uppercase" }}>Optimization Workspace</span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: "#22c55e", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                  Optimization Workspace
+                </span>
               </div>
               <h1 style={{ fontSize: "clamp(26px,3.5vw,38px)", fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1.1, margin: 0 }}>
-                Parse first. Then optimize
+                Parse first. Then unlock
                 <br />
-                <span style={{ color: LI_LIGHT }}>one section at a time.</span>
+                <span style={{ color: LI_LIGHT }}>all sections at once.</span>
               </h1>
               <p style={{ marginTop: 12, fontSize: 14, color: "rgba(255,255,255,0.5)", lineHeight: 1.6 }}>
-                This workflow reduces request bursts, lowers failure risk, and makes each output easier to review and copy.
+                Pay once, then watch each section generate live and copy each finished output from the cards below.
               </p>
             </div>
 
@@ -1685,18 +2008,45 @@ useEffect(() => {
               )}
 
               {showClearConfirm && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 12, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "8px 14px",
+                    borderRadius: 12,
+                    background: "rgba(239,68,68,0.1)",
+                    border: "1px solid rgba(239,68,68,0.3)",
+                  }}
+                >
                   <span style={{ fontSize: 12, color: "#fca5a5" }}>Clear everything?</span>
                   <button
                     onClick={handleStartOver}
                     disabled={clearing}
-                    style={{ padding: "5px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "#ef4444", border: "none", color: "white" }}
+                    style={{
+                      padding: "5px 14px",
+                      borderRadius: 8,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      background: "#ef4444",
+                      border: "none",
+                      color: "white",
+                    }}
                   >
                     {clearing ? "Clearing..." : "Yes, clear"}
                   </button>
                   <button
                     onClick={() => setShowClearConfirm(false)}
-                    style={{ padding: "5px 12px", borderRadius: 8, fontSize: 12, cursor: "pointer", background: "transparent", border: "1px solid rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.5)" }}
+                    style={{
+                      padding: "5px 12px",
+                      borderRadius: 8,
+                      fontSize: 12,
+                      cursor: "pointer",
+                      background: "transparent",
+                      border: "1px solid rgba(255,255,255,0.15)",
+                      color: "rgba(255,255,255,0.5)",
+                    }}
                   >
                     Cancel
                   </button>
@@ -1725,7 +2075,11 @@ useEffect(() => {
           </div>
 
           <div style={{ display: "flex", gap: 8, marginTop: 24, flexWrap: "wrap" }}>
-            {["Step 1: Upload & parse once.", "Step 2: Generate any section.", "Step 3: Copy straight into LinkedIn."].map((note, i) => (
+            {[
+              "Step 1: Upload & parse once.",
+              "Step 2: Unlock Generate All.",
+              "Step 3: Copy each completed section.",
+            ].map((note, i) => (
               <div
                 key={note}
                 style={{
@@ -1782,7 +2136,9 @@ useEffect(() => {
                     >
                       {done ? "✓" : i + 1}
                     </div>
-                    <span style={{ fontSize: 13, color: done ? "rgba(255,255,255,0.7)" : active ? "white" : "rgba(255,255,255,0.3)", transition: "color 0.4s" }}>{step}</span>
+                    <span style={{ fontSize: 13, color: done ? "rgba(255,255,255,0.7)" : active ? "white" : "rgba(255,255,255,0.3)", transition: "color 0.4s" }}>
+                      {step}
+                    </span>
                   </div>
                 );
               })}
@@ -1804,16 +2160,18 @@ useEffect(() => {
               <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 14, color: "white" }}>Workflow tips</p>
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 {[
-                  { tip: "Start with Headline and About for the highest profile visibility ROI.", cat: "Priority" },
-                  { tip: "Paste a real job description to unlock keyword-matched, role-specific output.", cat: "Quality" },
-                  { tip: "Use Branding mode for discoverability; switch to Recruiter mode when applying to a specific role.", cat: "Mode" },
-                  { tip: "Generate Positioning Advice last — it synthesises all sections into a strategic angle.", cat: "Strategy" },
-                  { tip: "Skills are LinkedIn's primary recruiter search filter. Aim for 25-40 and keep them specific.", cat: "SEO" },
-                  { tip: "Copy each section directly into LinkedIn. The output is already formatted to paste.", cat: "Workflow" },
-                  { tip: "Re-parse with a different Target Role to create a second version of your profile.", cat: "Pro tip" },
+                  { tip: "Parse once, then use Generate All to unlock the full LinkedIn profile pack in one run.", cat: "Flow" },
+                  { tip: "Paste a real job description to improve role alignment and keyword relevance.", cat: "Quality" },
+                  { tip: "Use Branding mode for discoverability; switch to Recruiter mode when targeting a specific role.", cat: "Mode" },
+                  { tip: "Each section card will open automatically as soon as its result is ready.", cat: "Live" },
+                  { tip: "Copy directly from each finished card into LinkedIn — formatting is optimized for pasting.", cat: "Workflow" },
+                  { tip: "When signed in, every generated result should persist to your saved workspace.", cat: "Persistence" },
+                  { tip: "Uploading a new resume creates a new workspace and keeps your earlier ones in dashboard history.", cat: "History" },
                 ].map(({ tip, cat }) => (
                   <div key={cat} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                    <span style={{ flexShrink: 0, marginTop: 1, padding: "1px 7px", borderRadius: 99, fontSize: 10, fontWeight: 600, background: LI_SUBTLE, border: "1px solid " + LI_BORDER, color: LI_LIGHT, letterSpacing: "0.04em" }}>{cat}</span>
+                    <span style={{ flexShrink: 0, marginTop: 1, padding: "1px 7px", borderRadius: 99, fontSize: 10, fontWeight: 600, background: LI_SUBTLE, border: "1px solid " + LI_BORDER, color: LI_LIGHT, letterSpacing: "0.04em" }}>
+                      {cat}
+                    </span>
                     <span style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", lineHeight: 1.6 }}>{tip}</span>
                   </div>
                 ))}
@@ -1839,12 +2197,16 @@ useEffect(() => {
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
                   <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px #22c55e" }} />
-                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#22c55e" }}>Parsed profile preview</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#22c55e" }}>
+                    Parsed profile preview
+                  </span>
                 </div>
-                <p style={{ fontSize: 13, color: "rgba(255,255,255,0.45)" }}>Resume successfully parsed. Generate sections individually below.</p>
+                <p style={{ fontSize: 13, color: "rgba(255,255,255,0.45)" }}>
+                  Resume successfully parsed. Unlock Generate All below to fill every section.
+                </p>
               </div>
               <div style={{ padding: "4px 14px", borderRadius: 99, fontSize: 11, fontFamily: "monospace", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.35)" }}>
-                Draft ID: {parsedId}
+                Draft ID: {parsedId || "workspace restore"}
               </div>
             </div>
 
@@ -1863,7 +2225,9 @@ useEffect(() => {
 
             {topPreview.length > 0 && (
               <div>
-                <p style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.35)", marginBottom: 9 }}>Top parsed skills</p>
+                <p style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.35)", marginBottom: 9 }}>
+                  Top parsed skills
+                </p>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
                   {topPreview.map((skill, i) => (
                     <span
@@ -1940,15 +2304,7 @@ useEffect(() => {
                     overflow: "hidden",
                   }}
                 >
-                  <p
-                    style={{
-                      fontSize: 11,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.08em",
-                      color: "rgba(255,255,255,0.35)",
-                      marginBottom: 4,
-                    }}
-                  >
+                  <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(255,255,255,0.35)", marginBottom: 4 }}>
                     {s.label}
                   </p>
 
@@ -1964,11 +2320,7 @@ useEffect(() => {
                         userSelect: s.locked ? "none" : "auto",
                       }}
                     >
-                      {atsResult && s.label === "ATS Score" ? (
-                        <AnimatedNumber to={atsResult.overallScore} />
-                      ) : (
-                        s.value
-                      )}
+                      {atsResult && s.label === "ATS Score" ? <AnimatedNumber to={atsResult.overallScore} /> : s.value}
                     </p>
 
                     {s.locked && (
@@ -1989,9 +2341,7 @@ useEffect(() => {
                     )}
                   </div>
 
-                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 3 }}>
-                    {s.locked ? "unlock after payment" : s.sub}
-                  </p>
+                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 3 }}>{s.locked ? "unlock after payment" : s.sub}</p>
                 </div>
               ))}
             </div>
@@ -2021,7 +2371,7 @@ useEffect(() => {
                 </button>
               ))}
 
-              {activeTab === "sections" && parsedId && (
+              {activeTab === "sections" && structured && (
                 <div style={{ marginLeft: 8, display: "flex", alignItems: "center", gap: 8 }}>
                   {!genAllRunning ? (
                     <button
@@ -2032,19 +2382,13 @@ useEffect(() => {
                         borderRadius: 10,
                         fontSize: 13,
                         fontWeight: 700,
-                        cursor:
-                          doneCount === SECTION_ORDER.length || isPaymentLoading
-                            ? "not-allowed"
-                            : "pointer",
+                        cursor: doneCount === SECTION_ORDER.length || isPaymentLoading ? "not-allowed" : "pointer",
                         background:
                           doneCount === SECTION_ORDER.length || isPaymentLoading
                             ? "rgba(255,255,255,0.06)"
                             : "linear-gradient(135deg," + LI_BLUE + ",#0077b5)",
                         border: "none",
-                        color:
-                          doneCount === SECTION_ORDER.length || isPaymentLoading
-                            ? "rgba(255,255,255,0.25)"
-                            : "white",
+                        color: doneCount === SECTION_ORDER.length || isPaymentLoading ? "rgba(255,255,255,0.25)" : "white",
                         boxShadow:
                           doneCount === SECTION_ORDER.length || isPaymentLoading
                             ? "none"
@@ -2055,9 +2399,7 @@ useEffect(() => {
                         gap: 7,
                       }}
                     >
-                      <span style={{ fontSize: 15 }}>
-                        {isGenerateAllUnlocked ? "⚡" : "🔒"}
-                      </span>
+                      <span style={{ fontSize: 15 }}>{isGenerateAllUnlocked ? "⚡" : "🔒"}</span>
                       {doneCount === SECTION_ORDER.length
                         ? "All done"
                         : isPaymentLoading
@@ -2091,8 +2433,22 @@ useEffect(() => {
                       <span style={{ fontSize: 13 }}>■</span> Stop
                     </button>
                   )}
+
                   {genAllRunning && genAllIndex >= 0 && (
-                    <div style={{ padding: "6px 12px", borderRadius: 99, fontSize: 11, fontWeight: 600, background: LI_SUBTLE, border: "1px solid " + LI_BORDER, color: "#93c5fd", display: "flex", alignItems: "center", gap: 6 }}>
+                    <div
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: 99,
+                        fontSize: 11,
+                        fontWeight: 600,
+                        background: LI_SUBTLE,
+                        border: "1px solid " + LI_BORDER,
+                        color: "#93c5fd",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
                       <div style={{ width: 6, height: 6, borderRadius: "50%", border: "1.5px solid transparent", borderTopColor: LI_LIGHT, animation: "liSpin 0.7s linear infinite" }} />
                       {genAllIndex + 1} / {SECTION_ORDER.length}
                     </div>
@@ -2125,24 +2481,19 @@ useEffect(() => {
             {activeTab === "sections" && (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 14, alignItems: "stretch" }}>
                 {SECTION_ORDER.map((item, i) => (
-                  <div
-                    key={`${item.key}-${sections[item.key].status}`}
-                    style={{ animation: "liFadeUp 0.4s ease " + i * 0.05 + "s both", height: "100%", display: "flex", flexDirection: "column" }}
-                  >
+                  <div key={item.key} style={{ animation: "liFadeUp 0.4s ease " + i * 0.05 + "s both", height: "100%", display: "flex", flexDirection: "column" }}>
                     <SectionCard
                       item={item}
                       state={sections[item.key]}
                       busy={activeSection === item.key}
                       copiedSection={copiedSection}
-                      activeSection={activeSection}
-                      onGenerate={generateSection}
-                      onCopy={handleCopy}
                       queuePosition={
                         genAllRunning && sections[item.key]?.status !== "success"
                           ? SECTION_ORDER.findIndex((s) => s.key === item.key) - genAllIndex
                           : null
                       }
                       genAllRunning={genAllRunning}
+                      onCopy={handleCopy}
                     />
                   </div>
                 ))}
@@ -2159,7 +2510,9 @@ useEffect(() => {
                     </div>
                     <div>
                       <p style={{ fontSize: 15, fontWeight: 600 }}>Analyzing for ATS compatibility...</p>
-                      <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 5 }}>Scanning keyword density · Checking formatting · Scoring impact language</p>
+                      <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 5 }}>
+                        Scanning keyword density · Checking formatting · Scoring impact language
+                      </p>
                     </div>
                   </div>
                 )}
@@ -2168,9 +2521,7 @@ useEffect(() => {
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 0", gap: 10, textAlign: "center" }}>
                     <div style={{ fontSize: 42, color: "rgba(10,102,194,0.35)" }}>◎</div>
                     <p style={{ fontSize: 14, fontWeight: 600 }}>No ATS score yet</p>
-                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>
-                      Click &quot;Run ATS Score&quot; above
-                    </p>
+                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>Click &quot;Run ATS Score&quot; above</p>
                   </div>
                 )}
 
@@ -2187,6 +2538,7 @@ useEffect(() => {
                         ))}
                       </div>
                     </div>
+
                     <div style={{ borderRadius: 18, padding: "22px 20px", background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
                         <p style={{ fontSize: 14, fontWeight: 700 }}>Issues &amp; Fixes</p>
@@ -2224,7 +2576,9 @@ useEffect(() => {
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
                         <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 7px #22c55e" }} />
                         <span style={{ fontSize: 13, fontWeight: 700, color: "#4ade80" }}>Keywords Found</span>
-                        <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: "monospace", color: "rgba(255,255,255,0.3)" }}>{atsResult.keywordsFound.length} matched</span>
+                        <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: "monospace", color: "rgba(255,255,255,0.3)" }}>
+                          {atsResult.keywordsFound.length} matched
+                        </span>
                       </div>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
                         {atsResult.keywordsFound.map((kw, i) => (
@@ -2255,26 +2609,9 @@ useEffect(() => {
                         }}
                       >
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                          <div
-                            style={{
-                              width: 7,
-                              height: 7,
-                              borderRadius: "50%",
-                              background: "#ef4444",
-                              boxShadow: "0 0 7px #ef444466",
-                            }}
-                          />
-                          <span style={{ fontSize: 13, fontWeight: 700, color: "#fca5a5" }}>
-                            Keyword Gaps
-                          </span>
-                          <span
-                            style={{
-                              marginLeft: "auto",
-                              fontSize: 11,
-                              fontFamily: "monospace",
-                              color: "rgba(255,255,255,0.3)",
-                            }}
-                          >
+                          <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#ef4444", boxShadow: "0 0 7px #ef444466" }} />
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "#fca5a5" }}>Keyword Gaps</span>
+                          <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: "monospace", color: "rgba(255,255,255,0.3)" }}>
                             {atsResult.keywordsMissing.length} missing
                           </span>
                         </div>
@@ -2284,9 +2621,7 @@ useEffect(() => {
                             <KwChip key={kw} word={kw} found={false} delay={i * 60} />
                           ))}
                           {atsResult.keywordsMissing.length === 0 && (
-                            <span style={{ fontSize: 13, color: "#4ade80" }}>
-                              ✓ No major gaps detected
-                            </span>
+                            <span style={{ fontSize: 13, color: "#4ade80" }}>✓ No major gaps detected</span>
                           )}
                         </div>
 
@@ -2318,17 +2653,8 @@ useEffect(() => {
                             }}
                           >
                             <div style={{ fontSize: 18, marginBottom: 6 }}>🔒</div>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: "white" }}>
-                              Keyword gaps unlock after payment
-                            </div>
-                            <div
-                              style={{
-                                fontSize: 11,
-                                color: "rgba(255,255,255,0.55)",
-                                marginTop: 4,
-                                lineHeight: 1.5,
-                              }}
-                            >
+                            <div style={{ fontSize: 13, fontWeight: 700, color: "white" }}>Keyword gaps unlock after payment</div>
+                            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginTop: 4, lineHeight: 1.5 }}>
                               Pay through Generate All to reveal missing keywords.
                             </div>
                           </div>
@@ -2369,7 +2695,9 @@ useEffect(() => {
         <section style={{ borderRadius: 16, padding: "14px 20px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", display: "flex", alignItems: "flex-start", gap: 12 }}>
           <span style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>⚠</span>
           <div>
-            <p style={{ fontSize: 13, fontWeight: 600, color: "#fcd34d", marginBottom: 3 }}>Disclaimer — please review all AI-generated content before use</p>
+            <p style={{ fontSize: 13, fontWeight: 600, color: "#fcd34d", marginBottom: 3 }}>
+              Disclaimer — please review all AI-generated content before use
+            </p>
             <p style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", lineHeight: 1.6 }}>
               This tool uses AI to suggest LinkedIn profile content based on your resume. Outputs may contain inaccuracies, embellishments, or misrepresentations.
               Always verify facts, dates, titles, and metrics before publishing. Never claim skills or experience you do not have.

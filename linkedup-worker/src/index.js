@@ -38,18 +38,65 @@ export default {
   },
 };
 
+async function ensureDbUser(env, clerkUserId, email = null) {
+  if (!clerkUserId) return null;
+
+  const existing = await env.DB.prepare(`
+    SELECT id
+    FROM users
+    WHERE clerk_user_id = ?
+    LIMIT 1
+  `)
+    .bind(clerkUserId)
+    .first();
+
+  if (existing) {
+    if (existing.id) {
+      return existing.id;
+    }
+
+    const repairedId = crypto.randomUUID();
+
+    await env.DB.prepare(`
+      UPDATE users
+      SET id = ?
+      WHERE clerk_user_id = ?
+        AND id IS NULL
+    `)
+      .bind(repairedId, clerkUserId)
+      .run();
+
+    return repairedId;
+  }
+
+  const userId = crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  await env.DB.prepare(`
+    INSERT INTO users (id, clerk_user_id, email, created_at)
+    VALUES (?, ?, ?, ?)
+  `)
+    .bind(userId, clerkUserId, email, now)
+    .run();
+
+  return userId;
+}
+
 async function uploadResume(request, env) {
   try {
     const form = await request.formData();
     const file = form.get("file");
-    const userId = String(form.get("userId") || "").trim();
+    const clerkUserId = String(form.get("userId") || "").trim();
 
     if (!(file instanceof File)) {
       return json({ ok: false, error: "Missing file" }, 400);
     }
 
+    const dbUserId = clerkUserId ? await ensureDbUser(env, clerkUserId) : null;
+
     const workspaceId = crypto.randomUUID();
-    const key = `resumes/${workspaceId}_${file.name}`;
+    const safeFileName = String(file.name || "resume").replace(/[^a-zA-Z0-9._-]/g, "_");
+    const key = `resumes/${workspaceId}_${safeFileName}`;
     const now = new Date().toISOString();
 
     const buffer = await file.arrayBuffer();
@@ -76,7 +123,7 @@ async function uploadResume(request, env) {
     `)
       .bind(
         workspaceId,
-        userId || null,
+        dbUserId,
         key,
         file.name,
         null,
@@ -107,6 +154,7 @@ async function saveParsedWorkspace(request, env) {
   try {
     const body = await request.json();
     const workspaceId = String(body?.workspaceId || "").trim();
+    const clerkUserId = String(body?.userId || "").trim();
     const structured = body?.structured ?? null;
     const ctx = body?.ctx ?? null;
     const sectionResults = body?.sectionResults ?? null;
@@ -115,11 +163,13 @@ async function saveParsedWorkspace(request, env) {
       return json({ ok: false, error: "Missing workspaceId" }, 400);
     }
 
+    const dbUserId = clerkUserId ? await ensureDbUser(env, clerkUserId) : null;
     const now = new Date().toISOString();
 
-    await env.DB.prepare(`
+    const result = await env.DB.prepare(`
       UPDATE workspaces
       SET
+        user_id = COALESCE(user_id, ?),
         structured_json = ?,
         ctx_json = ?,
         section_results_json = COALESCE(?, section_results_json),
@@ -128,6 +178,7 @@ async function saveParsedWorkspace(request, env) {
       WHERE id = ?
     `)
       .bind(
+        dbUserId,
         structured ? JSON.stringify(structured) : null,
         ctx ? JSON.stringify(ctx) : null,
         sectionResults ? JSON.stringify(sectionResults) : null,
@@ -136,6 +187,10 @@ async function saveParsedWorkspace(request, env) {
         workspaceId
       )
       .run();
+
+    if (!result?.meta?.changes) {
+      return json({ ok: false, error: "Workspace not found" }, 404);
+    }
 
     return json({ ok: true });
   } catch (e) {
@@ -150,23 +205,30 @@ async function markWorkspacePaid(request, env) {
   try {
     const body = await request.json();
     const workspaceId = String(body?.workspaceId || "").trim();
+    const clerkUserId = String(body?.userId || "").trim();
 
     if (!workspaceId) {
       return json({ ok: false, error: "Missing workspaceId" }, 400);
     }
 
+    const dbUserId = clerkUserId ? await ensureDbUser(env, clerkUserId) : null;
     const now = new Date().toISOString();
 
-    await env.DB.prepare(`
+    const result = await env.DB.prepare(`
       UPDATE workspaces
       SET
+        user_id = COALESCE(user_id, ?),
         is_paid = 1,
         updated_at = ?,
         last_opened_at = ?
       WHERE id = ?
     `)
-      .bind(now, now, workspaceId)
+      .bind(dbUserId, now, now, workspaceId)
       .run();
+
+    if (!result?.meta?.changes) {
+      return json({ ok: false, error: "Workspace not found" }, 404);
+    }
 
     return json({ ok: true });
   } catch (e) {
@@ -188,7 +250,7 @@ async function touchWorkspace(request, env) {
 
     const now = new Date().toISOString();
 
-    await env.DB.prepare(`
+    const result = await env.DB.prepare(`
       UPDATE workspaces
       SET
         updated_at = ?,
@@ -197,6 +259,10 @@ async function touchWorkspace(request, env) {
     `)
       .bind(now, now, workspaceId)
       .run();
+
+    if (!result?.meta?.changes) {
+      return json({ ok: false, error: "Workspace not found" }, 404);
+    }
 
     return json({ ok: true });
   } catch (e) {
@@ -266,10 +332,23 @@ async function getWorkspace(request, env) {
 async function listWorkspaces(request, env) {
   try {
     const url = new URL(request.url);
-    const userId = (url.searchParams.get("userId") || "").trim();
+    const clerkUserId = (url.searchParams.get("userId") || "").trim();
 
-    if (!userId) {
+    if (!clerkUserId) {
       return json({ ok: false, error: "Missing userId" }, 400);
+    }
+
+    const user = await env.DB.prepare(`
+      SELECT id
+      FROM users
+      WHERE clerk_user_id = ?
+      LIMIT 1
+    `)
+      .bind(clerkUserId)
+      .first();
+
+    if (!user?.id) {
+      return json({ ok: true, workspaces: [] });
     }
 
     const result = await env.DB.prepare(`
@@ -292,7 +371,7 @@ async function listWorkspaces(request, env) {
         updated_at DESC,
         created_at DESC
     `)
-      .bind(userId)
+      .bind(user.id)
       .all();
 
     const workspaces = (result?.results || []).map((workspace) => {
@@ -329,7 +408,12 @@ async function listWorkspaces(request, env) {
             : null;
 
         if (sectionResults && typeof sectionResults === "object") {
-          sectionsDone = Object.values(sectionResults).filter(Boolean).length;
+          sectionsDone = Object.values(sectionResults).filter(
+            (section) =>
+              section &&
+              typeof section === "object" &&
+              section.status === "success"
+          ).length;
         }
       } catch {
         sectionsDone = 0;

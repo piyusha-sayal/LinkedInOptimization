@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { optimizeSectionFromSession, optimizeSectionFromStructured } from "@/lib/optimizer";
+import {
+  optimizeSectionFromSession,
+  optimizeSectionFromStructured,
+} from "@/lib/optimizer";
 import type {
   OptimizeMode,
   Seniority,
@@ -9,6 +12,12 @@ import type {
 } from "@/lib/types";
 
 export const runtime = "nodejs";
+
+type SectionState<T = unknown> = {
+  status: "idle" | "loading" | "success" | "error";
+  data?: T;
+  error?: string;
+};
 
 const VALID_SECTIONS: SectionKey[] = [
   "headline",
@@ -25,10 +34,24 @@ function isSectionKey(value: string): value is SectionKey {
   return VALID_SECTIONS.includes(value as SectionKey);
 }
 
+function makeInitialSections(): Record<SectionKey, SectionState> {
+  return {
+    headline: { status: "idle" },
+    about: { status: "idle" },
+    experience: { status: "idle" },
+    skills: { status: "idle" },
+    certifications: { status: "idle" },
+    projects: { status: "idle" },
+    banner_tagline: { status: "idle" },
+    positioning_advice: { status: "idle" },
+  };
+}
+
 async function getWorkerWorkspace(workspaceId: string): Promise<{
   workspace: {
     structured_json?: string | null;
     ctx_json?: string | null;
+    section_results_json?: string | null;
   };
 }> {
   const workerBase = process.env.NEXT_PUBLIC_LINKEDUP_WORKER_URL;
@@ -55,8 +78,125 @@ async function getWorkerWorkspace(workspaceId: string): Promise<{
     workspace: {
       structured_json?: string | null;
       ctx_json?: string | null;
+      section_results_json?: string | null;
     };
   };
+}
+
+async function saveParsedWorkspaceToWorker(
+  workspaceId: string,
+  structured: StructuredResume,
+  ctx: UserContext,
+  sectionResults: Record<SectionKey, SectionState>
+): Promise<void> {
+  const workerBase = process.env.NEXT_PUBLIC_LINKEDUP_WORKER_URL;
+
+  if (!workerBase) {
+    throw new Error("Missing NEXT_PUBLIC_LINKEDUP_WORKER_URL.");
+  }
+
+  const res = await fetch(`${workerBase}/workspace/save-parsed`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      workspaceId,
+      structured,
+      ctx,
+      sectionResults,
+    }),
+    cache: "no-store",
+  });
+
+  const json = await res.json();
+
+  if (!res.ok || !json?.ok) {
+    throw new Error(json?.error || "Failed to save generated section.");
+  }
+}
+
+function mergeContext(
+  savedCtx: Partial<UserContext>,
+  overrides: Partial<UserContext>
+): UserContext {
+  return {
+    targetRole: "",
+    industry: "",
+    seniority: "Mid",
+    mode: "Branding",
+    targetJobText: "",
+    ...savedCtx,
+    ...Object.fromEntries(
+      Object.entries(overrides).filter(([, value]) => value !== undefined)
+    ),
+  };
+}
+
+async function persistGeneratedSection(params: {
+  workspaceId: string;
+  section: SectionKey;
+  sectionData: unknown;
+  overrides: Partial<UserContext>;
+}) {
+  const data = await getWorkerWorkspace(params.workspaceId);
+
+  const structuredJson = data.workspace?.structured_json;
+  const ctxJson = data.workspace?.ctx_json;
+  const sectionResultsJson = data.workspace?.section_results_json;
+
+  if (!structuredJson) {
+    throw new Error("Workspace structured data not found while saving section.");
+  }
+
+  let structured: StructuredResume;
+  let savedCtx: Partial<UserContext> = {};
+  let savedSections: Record<SectionKey, SectionState> = makeInitialSections();
+
+  try {
+    structured = JSON.parse(structuredJson) as StructuredResume;
+  } catch {
+    throw new Error("Workspace structured data is invalid.");
+  }
+
+  if (ctxJson) {
+    try {
+      savedCtx = JSON.parse(ctxJson) as Partial<UserContext>;
+    } catch {
+      savedCtx = {};
+    }
+  }
+
+  if (sectionResultsJson) {
+    try {
+      const parsed = JSON.parse(
+        sectionResultsJson
+      ) as Record<SectionKey, SectionState>;
+      savedSections = {
+        ...makeInitialSections(),
+        ...parsed,
+      };
+    } catch {
+      savedSections = makeInitialSections();
+    }
+  }
+
+  const mergedCtx = mergeContext(savedCtx, params.overrides);
+
+  const nextSections: Record<SectionKey, SectionState> = {
+    ...savedSections,
+    [params.section]: {
+      status: "success",
+      data: params.sectionData,
+    },
+  };
+
+  await saveParsedWorkspaceToWorker(
+    params.workspaceId,
+    structured,
+    mergedCtx,
+    nextSections
+  );
 }
 
 export async function POST(req: Request) {
@@ -96,11 +236,13 @@ export async function POST(req: Request) {
         : undefined,
     };
 
-    // 1) First try normal session-based optimization
+    let resultData: unknown = null;
+
+    // 1) Try session-based optimization first
     if (id) {
       try {
         const result = await optimizeSectionFromSession(id, section, overrides);
-        return NextResponse.json(result, { status: 200 });
+        resultData = result.data;
       } catch (sessionError) {
         const sessionMessage =
           sessionError instanceof Error ? sessionError.message : "";
@@ -109,72 +251,79 @@ export async function POST(req: Request) {
           sessionMessage.toLowerCase().includes("session not found") ||
           sessionMessage.toLowerCase().includes("expired");
 
-        // If it failed for some other reason, don't silently fall through.
         if (!workspaceId || !looksLikeMissingSession) {
           throw sessionError;
         }
       }
     }
 
-    // 2) Fallback to worker workspace-based optimization
-    if (!workspaceId) {
-      return NextResponse.json(
-        { error: "Session not found or expired. Please re-parse your resume." },
-        { status: 404 }
-      );
-    }
-
-    const data = await getWorkerWorkspace(workspaceId);
-    const structuredJson = data.workspace?.structured_json;
-    const ctxJson = data.workspace?.ctx_json;
-
-    if (!structuredJson) {
-      return NextResponse.json(
-        { error: "Parsed resume data not found in workspace. Please re-parse your resume." },
-        { status: 404 }
-      );
-    }
-
-    let structured: StructuredResume;
-    let savedCtx: Partial<UserContext> = {};
-
-    try {
-      structured = JSON.parse(structuredJson) as StructuredResume;
-    } catch {
-      return NextResponse.json(
-        { error: "Workspace structured data is invalid." },
-        { status: 500 }
-      );
-    }
-
-    if (ctxJson) {
-      try {
-        savedCtx = JSON.parse(ctxJson) as Partial<UserContext>;
-      } catch {
-        savedCtx = {};
+    // 2) Fallback to workspace-based optimization
+    if (resultData === null) {
+      if (!workspaceId) {
+        return NextResponse.json(
+          {
+            error:
+              "Session not found or expired. Please re-parse your resume.",
+          },
+          { status: 404 }
+        );
       }
+
+      const data = await getWorkerWorkspace(workspaceId);
+      const structuredJson = data.workspace?.structured_json;
+      const ctxJson = data.workspace?.ctx_json;
+
+      if (!structuredJson) {
+        return NextResponse.json(
+          {
+            error:
+              "Parsed resume data not found in workspace. Please re-parse your resume.",
+          },
+          { status: 404 }
+        );
+      }
+
+      let structured: StructuredResume;
+      let savedCtx: Partial<UserContext> = {};
+
+      try {
+        structured = JSON.parse(structuredJson) as StructuredResume;
+      } catch {
+        return NextResponse.json(
+          { error: "Workspace structured data is invalid." },
+          { status: 500 }
+        );
+      }
+
+      if (ctxJson) {
+        try {
+          savedCtx = JSON.parse(ctxJson) as Partial<UserContext>;
+        } catch {
+          savedCtx = {};
+        }
+      }
+
+      const mergedCtx = mergeContext(savedCtx, overrides);
+
+      resultData = await optimizeSectionFromStructured(
+        structured,
+        section,
+        mergedCtx
+      );
     }
 
-    const mergedCtx: UserContext = {
-      targetRole: "",
-      industry: "",
-      seniority: "Mid",
-      mode: "Branding",
-      targetJobText: "",
-      ...savedCtx,
-      ...Object.fromEntries(
-        Object.entries(overrides).filter(([, value]) => value !== undefined)
-      ),
-    };
-
-    const result = await optimizeSectionFromStructured(
-      structured,
-      section,
-      mergedCtx
-    );
+    // 3) Persist generated result back to worker/D1
+    if (workspaceId) {
+      await persistGeneratedSection({
+        workspaceId,
+        section,
+        sectionData: resultData,
+        overrides,
+      });
+    }
 
     return NextResponse.json(
-      { section, data: result },
+      { section, data: resultData },
       { status: 200 }
     );
   } catch (e: unknown) {

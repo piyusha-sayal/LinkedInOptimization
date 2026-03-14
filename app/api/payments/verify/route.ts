@@ -6,6 +6,7 @@ export const runtime = "nodejs";
 
 type VerifyPaymentBody = {
   resultId?: string;
+  workspaceId?: string;
   feature?: string;
   razorpay_payment_id?: string;
   razorpay_order_id?: string;
@@ -97,6 +98,7 @@ async function fetchRazorpayPayment(
 
 async function markWorkspacePaid(params: {
   workspaceId: string;
+  userId: string;
   razorpayPaymentId: string;
   razorpayOrderId: string;
   feature: string;
@@ -114,6 +116,7 @@ async function markWorkspacePaid(params: {
     },
     body: JSON.stringify({
       workspaceId: params.workspaceId,
+      userId: params.userId,
       feature: params.feature,
       razorpayPaymentId: params.razorpayPaymentId,
       razorpayOrderId: params.razorpayOrderId,
@@ -142,6 +145,7 @@ export async function POST(req: Request) {
     const body = (await req.json()) as VerifyPaymentBody;
 
     const resultId = (body.resultId || "").trim();
+    const workspaceId = (body.workspaceId || "").trim();
     const feature = (body.feature || "").trim();
     const paymentId = (body.razorpay_payment_id || "").trim();
     const orderId = (body.razorpay_order_id || "").trim();
@@ -150,6 +154,13 @@ export async function POST(req: Request) {
     if (!resultId) {
       return NextResponse.json(
         { ok: false, error: "Missing resultId." },
+        { status: 400 }
+      );
+    }
+
+    if (!workspaceId) {
+      return NextResponse.json(
+        { ok: false, error: "Missing workspaceId." },
         { status: 400 }
       );
     }
@@ -214,7 +225,8 @@ export async function POST(req: Request) {
     }
 
     await markWorkspacePaid({
-      workspaceId: resultId,
+      workspaceId,
+      userId,
       razorpayPaymentId: paymentId,
       razorpayOrderId: orderId,
       feature,
@@ -227,6 +239,7 @@ export async function POST(req: Request) {
       status: payment.status,
       feature,
       resultId,
+      workspaceId,
       clerkUserId: userId,
     });
   } catch (error: unknown) {
