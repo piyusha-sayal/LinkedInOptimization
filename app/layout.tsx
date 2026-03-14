@@ -1,6 +1,10 @@
 import "./globals.css";
 import Link from "next/link";
 import type { Metadata } from "next";
+import { ClerkProvider, SignInButton } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs/server";
+import InactivitySignOut from "@/components/InactivitySignOut";
+import HeaderSignOut from "@/components/HeaderSignOut";
 
 export const metadata: Metadata = {
   title: "LinkedUp — AI LinkedIn Optimizer",
@@ -16,67 +20,94 @@ const nav = [
   { href: "/optimize", label: "Optimize" },
 ];
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const { userId } = await auth();
+
   return (
-    <html lang="en">
-      <head>
-        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-      </head>
-      <body className="min-h-screen text-white">
-        <div className="mx-auto max-w-7xl px-5 py-6 md:px-6 md:py-8">
+    <ClerkProvider>
+      <html lang="en">
+        <head>
+          <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+        </head>
+        <body className="min-h-screen text-white">
+          <InactivitySignOut />
 
-          {/* ── Top brand bar ── */}
-          {/* Replace the top brand bar div */}
-<div className="mb-4 flex items-center justify-center">
-  <Link href="/" className="flex flex-col items-center">
-    <img src="/logo.svg" alt="LinkedUp logo" height={36} style={{ height: 36, width: "auto" }} />
-    <div className="flex flex-col items-center">
-      <span className="text-2xl font-bold tracking-tight text-white leading-none">
-        Linked<span className="text-[color:var(--luna-200)]">Up</span>
-      </span>
-      <span className="mt-1 text-[11px] font-medium tracking-[0.18em] uppercase text-white/35">
-        AI LinkedIn Optimizer
-      </span>
-    </div>
-  </Link>
-</div>
-
-          {/* ── Original navbar — untouched ── */}
-          <header className="mb-8 rounded-2xl border border-white/10 bg-black/25 backdrop-blur-xl">
-            <div className="flex flex-col gap-4 px-5 py-4 md:flex-row md:items-center md:justify-between">
-              <Link href="/" className="group">
-                <div className="text-xl font-semibold tracking-tight">
-                  <span className="text-white">AI</span>{" "}
-                  <span className="text-[color:var(--luna-200)] group-hover:text-[color:var(--luna-100)] transition">
-                    LinkedIn Optimizer
+          <div className="mx-auto max-w-7xl px-5 py-6 md:px-6 md:py-8">
+            <div className="mb-4 flex items-center justify-center">
+              <Link href="/" className="flex flex-col items-center">
+                <img
+                  src="/logo.svg"
+                  alt="LinkedUp logo"
+                  height={36}
+                  style={{ height: 36, width: "auto" }}
+                />
+                <div className="flex flex-col items-center">
+                  <span className="text-2xl font-bold leading-none tracking-tight text-white">
+                    Linked
+                    <span className="text-[color:var(--luna-200)]">Up</span>
+                  </span>
+                  <span className="mt-1 text-[11px] font-medium uppercase tracking-[0.18em] text-white/35">
+                    AI LinkedIn Optimizer
                   </span>
                 </div>
-                <div className="mt-1 text-xs text-white/55">
-                  Premium • Modular • Startup-scalable
-                </div>
               </Link>
-
-              <nav className="flex items-center gap-2">
-                {nav.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 transition hover:border-white/20 hover:bg-white/10 hover:text-white"
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </nav>
             </div>
-          </header>
 
-          {children}
-        </div>
-      </body>
-    </html>
+            <header className="mb-8 rounded-2xl border border-white/10 bg-black/25 backdrop-blur-xl">
+              <div className="flex flex-col gap-4 px-5 py-4 md:flex-row md:items-center md:justify-between">
+                <Link href="/" className="group">
+                  <div className="text-xl font-semibold tracking-tight">
+                    <span className="text-white">AI</span>{" "}
+                    <span className="text-[color:var(--luna-200)] transition group-hover:text-[color:var(--luna-100)]">
+                      LinkedIn Optimizer
+                    </span>
+                  </div>
+                  <div className="mt-1 text-xs text-white/55">
+                    Premium • Modular • Startup-scalable
+                  </div>
+                </Link>
+
+                <div className="flex items-center gap-3">
+                  <nav className="flex items-center gap-2">
+                    {nav.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 transition hover:border-white/20 hover:bg-white/10 hover:text-white"
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
+
+                    {userId ? (
+                      <Link
+                        href="/dashboard"
+                        className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 transition hover:border-white/20 hover:bg-white/10 hover:text-white"
+                      >
+                        Dashboard
+                      </Link>
+                    ) : (
+                      <SignInButton mode="modal">
+                        <button className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 transition hover:border-white/20 hover:bg-white/10 hover:text-white">
+                          Sign in
+                        </button>
+                      </SignInButton>
+                    )}
+                  </nav>
+
+                  {userId ? <HeaderSignOut /> : null}
+                </div>
+              </div>
+            </header>
+
+            {children}
+          </div>
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }

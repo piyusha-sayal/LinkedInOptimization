@@ -1,4 +1,3 @@
-// app/api/clear-session/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { clearSession } from "@/lib/sessionStore";
 

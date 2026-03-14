@@ -1,4 +1,3 @@
-// app/api/ats-score/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getParseSession } from "@/lib/sessionStore";
 import { runAI } from "@/lib/aiClient";
@@ -8,7 +7,6 @@ import {
   mergeKeywordScore,
   type ATSScoreResult,
 } from "@/lib/atsScorer";
-
 
 export const runtime = "nodejs";
 
@@ -26,7 +24,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "sessionId required" }, { status: 400 });
     }
 
-    // Load the parsed resume from session
     const session = getParseSession(sessionId);
     if (!session?.structured) {
       return NextResponse.json(
@@ -36,16 +33,14 @@ export async function POST(req: NextRequest) {
     }
 
     const ctx = {
-      targetRole:    targetRole    || session.ctx?.targetRole    || "",
+      targetRole: targetRole || session.ctx?.targetRole || "",
       targetJobText: targetJobText || session.ctx?.targetJobText || "",
-      industry:      session.ctx?.industry  || "",
-      seniority:     session.ctx?.seniority || "Mid",
+      industry: session.ctx?.industry || "",
+      seniority: session.ctx?.seniority || "Mid",
     };
 
-    // Step 1: Fast deterministic pass
     const deterministicResult = scoreResumeDeterministic(session.structured, ctx);
 
-    // Step 2 (optional): AI keyword analysis
     if (skipAI) {
       return NextResponse.json({ score: deterministicResult });
     }
@@ -74,14 +69,13 @@ export async function POST(req: NextRequest) {
         Array.isArray(aiResult.data?.missing)
       ) {
         finalResult = mergeKeywordScore(deterministicResult, {
-          keywordScore:  aiResult.data.keywordScore,
-          found:         aiResult.data.found,
-          missing:       aiResult.data.missing,
-          keywordNotes:  aiResult.data.keywordNotes || "",
+          keywordScore: aiResult.data.keywordScore,
+          found: aiResult.data.found,
+          missing: aiResult.data.missing,
+          keywordNotes: aiResult.data.keywordNotes || "",
         });
       }
     } catch (aiErr) {
-      // AI keyword pass failed — return deterministic result only
       console.warn(
         "[ats-score] AI keyword pass failed, returning deterministic score:",
         aiErr

@@ -1,4 +1,3 @@
-// app/api/parse-resume/route.ts
 import { NextResponse } from "next/server";
 import { parseResumeSession } from "@/lib/optimizer";
 import type { Seniority, OptimizeMode, UserContext } from "@/lib/types";

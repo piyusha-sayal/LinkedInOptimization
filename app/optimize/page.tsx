@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useAuth, useClerk } from "@clerk/nextjs";
 
 import { ResumeUpload } from "@/components/ResumeUpload";
 import { OptimizationSettings } from "@/components/OptimizationSettings";
@@ -87,21 +89,72 @@ type ExperienceItem = {
   skills?: string[];
 };
 
+type RazorpayCheckoutResponse = {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+};
+
+type RazorpayCheckoutInstance = {
+  open: () => void;
+};
+
+type RazorpayCheckoutOptions = {
+  key: string;
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  order_id: string;
+  handler: (response: RazorpayCheckoutResponse) => void;
+  modal?: {
+    ondismiss?: () => void;
+  };
+  prefill?: {
+    name?: string;
+    email?: string;
+    contact?: string;
+  };
+  theme?: {
+    color?: string;
+  };
+};
+
+type CreateOrderResponse = {
+  ok: boolean;
+  orderId: string;
+  amount: number;
+  currency: string;
+  keyId?: string;
+  error?: string;
+};
+
+type VerifyPaymentResponse = {
+  ok: boolean;
+  error?: string;
+};
+
+declare global {
+  interface Window {
+    Razorpay?: new (options: RazorpayCheckoutOptions) => RazorpayCheckoutInstance;
+  }
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const SECTION_ORDER: Array<{ key: SectionKey; title: string; desc: string; icon: string }> = [
-  { key: "headline",           title: "Headline",       desc: "220-character LinkedIn headline optimized for your target role.",  icon: "✦" },
-  { key: "about",              title: "About",          desc: "200-400 word summary that hooks and converts.",                   icon: "◎" },
-  { key: "experience",         title: "Experience",     desc: "Rewrite role bullets with impact and strong action verbs.",       icon: "◈" },
-  { key: "skills",             title: "Skills",         desc: "25-40 keywords tuned to recruiter searches.",                     icon: "⬡" },
-  { key: "certifications",     title: "Certifications", desc: "Normalize and reorder certificated by relevance.",                icon: "✪" },
-  { key: "projects",           title: "Projects",       desc: "Clarify tech stack, scope, and measurable outcome.",              icon: "◧" },
-  { key: "banner_tagline",     title: "Banner Tagline", desc: "3-8 word tagline for your LinkedIn banner image.",                icon: "▣" },
-  { key: "positioning_advice", title: "Strategy",       desc: "Full positioning angle, keyword plan, and outreach pitch.",       icon: "⚡" },
+  { key: "headline", title: "Headline", desc: "220-character LinkedIn headline optimized for your target role.", icon: "✦" },
+  { key: "about", title: "About", desc: "200-400 word summary that hooks and converts.", icon: "◎" },
+  { key: "experience", title: "Experience", desc: "Rewrite role bullets with impact and strong action verbs.", icon: "◈" },
+  { key: "skills", title: "Skills", desc: "25-40 keywords tuned to recruiter searches.", icon: "⬡" },
+  { key: "certifications", title: "Certifications", desc: "Normalize and reorder certificated by relevance.", icon: "✪" },
+  { key: "projects", title: "Projects", desc: "Clarify tech stack, scope, and measurable outcome.", icon: "◧" },
+  { key: "banner_tagline", title: "Banner Tagline", desc: "3-8 word tagline for your LinkedIn banner image.", icon: "▣" },
+  { key: "positioning_advice", title: "Strategy", desc: "Full positioning angle, keyword plan, and outreach pitch.", icon: "⚡" },
 ];
 
-const LI_BLUE   = "#0a66c2";
-const LI_LIGHT  = "#378fe9";
+const LI_BLUE = "#0a66c2";
+const LI_LIGHT = "#378fe9";
 const LI_SUBTLE = "rgba(10,102,194,0.15)";
 const LI_BORDER = "rgba(10,102,194,0.3)";
 
@@ -144,13 +197,13 @@ function formatSectionOutput(section: SectionKey, data: unknown): string {
       if (!Array.isArray(data)) return prettyPrint(data);
       const skills = data as string[];
       const CATS: [string, RegExp][] = [
-        ["Programming Languages",  /\b(python|scala|java|go|rust|c\+\+|r\b|sql|bash|shell|typescript|javascript|node)\b/i],
-        ["Data & ETL Frameworks",  /\b(spark|pyspark|hadoop|hive|kafka|flink|airflow|dbt|beam|nifi|ssis|matillion|talend|informatica|sqoop|flume)\b/i],
+        ["Programming Languages", /\b(python|scala|java|go|rust|c\+\+|r\b|sql|bash|shell|typescript|javascript|node)\b/i],
+        ["Data & ETL Frameworks", /\b(spark|pyspark|hadoop|hive|kafka|flink|airflow|dbt|beam|nifi|ssis|matillion|talend|informatica|sqoop|flume)\b/i],
         ["Cloud & Infrastructure", /\b(aws|azure|gcp|google cloud|snowflake|databricks|redshift|bigquery|s3|ec2|lambda|terraform|kubernetes|docker|ci\/cd)\b/i],
-        ["Databases",              /\b(postgresql|mysql|mongodb|redis|cassandra|elasticsearch|oracle|sql server|dynamodb|cosmos|neo4j|hbase|sqlite)\b/i],
-        ["BI & Visualisation",     /\b(tableau|power bi|looker|quicksight|grafana|superset|metabase|d3|plotly|matplotlib|seaborn)\b/i],
-        ["Data Science & ML",      /\b(machine learning|deep learning|nlp|pytorch|tensorflow|scikit|keras|feature engineering|statistics|pandas|numpy|jupyter)\b/i],
-        ["Methodologies",          /\b(agile|scrum|kanban|data governance|data modeling|erd|data quality|etl|elt|data mesh|data lakehouse|dimensional modeling|devops|restful|api)\b/i],
+        ["Databases", /\b(postgresql|mysql|mongodb|redis|cassandra|elasticsearch|oracle|sql server|dynamodb|cosmos|neo4j|hbase|sqlite)\b/i],
+        ["BI & Visualisation", /\b(tableau|power bi|looker|quicksight|grafana|superset|metabase|d3|plotly|matplotlib|seaborn)\b/i],
+        ["Data Science & ML", /\b(machine learning|deep learning|nlp|pytorch|tensorflow|scikit|keras|feature engineering|statistics|pandas|numpy|jupyter)\b/i],
+        ["Methodologies", /\b(agile|scrum|kanban|data governance|data modeling|erd|data quality|etl|elt|data mesh|data lakehouse|dimensional modeling|devops|restful|api)\b/i],
       ];
       const assigned = new Set<string>();
       const buckets: Record<string, string[]> = {};
@@ -173,64 +226,71 @@ function formatSectionOutput(section: SectionKey, data: unknown): string {
     }
 
     case "certifications": {
-      if (!Array.isArray(data)) return prettyPrint(data);
-      const certifications = data as CertificationItem[];
+  if (!Array.isArray(data)) return prettyPrint(data);
+  const certifications = data as CertificationItem[];
 
-      return certifications
-        .map((c, i) => {
-          const certTitle = [c.name, c.issuer ? "(" + c.issuer + ")" : ""]
-            .filter(Boolean)
-            .join(" ");
+  return certifications
+    .map((c, i) => {
+      const certName = c.name?.trim() || "Certificate not provided";
+      const issuer = c.issuer?.trim() || "Issuer not provided";
 
-          const parts: string[] = ["Certification " + (i + 1) + ": " + certTitle];
+      const parts: string[] = [
+        "Certification " + (i + 1),
+        "Name: " + certName,
+        "Issued by: " + issuer,
+      ];
 
-          if (c.issuer) parts.push("Issuing Org:    " + c.issuer);
-          if (c.name) parts.push("Full Name:      " + c.name);
+      const issued = [c.issueMonth, c.issueYear].filter(Boolean).join(" ");
+      if (issued) parts.push("Issue date: " + issued);
 
-          const issued = [c.issueMonth, c.issueYear].filter(Boolean).join(" ");
-          if (issued) parts.push("Issue date:     " + issued);
+      const expiry = [c.expiryMonth, c.expiryYear].filter(Boolean).join(" ");
+      if (expiry) parts.push("Expiration: " + expiry);
 
-          const expiry = [c.expiryMonth, c.expiryYear].filter(Boolean).join(" ");
-          if (expiry) parts.push("Expiration:     " + expiry);
+      if (c.credentialId) parts.push("Credential ID: " + c.credentialId);
+      if (c.credentialUrl) parts.push("Credential URL: " + c.credentialUrl);
 
-          if (c.credentialId) parts.push("Credential ID:  " + c.credentialId);
-          if (c.credentialUrl) parts.push("Credential URL: " + c.credentialUrl);
-
-          return parts.join("\n");
-        })
-        .join("\n\n");
-    }
+      return parts.join("\n");
+    })
+    .join("\n\n");
+}
 
     case "projects": {
-      if (!Array.isArray(data)) return prettyPrint(data);
-      const projects = data as ProjectItem[];
+  if (!Array.isArray(data)) return prettyPrint(data);
+  const projects = data as ProjectItem[];
 
-      return projects
-        .map((p, i) => {
-          const parts: string[] = ["Project " + (i + 1) + ": " + (p.name || "Unnamed")];
+  return projects
+    .map((p, i) => {
+      const projectName =
+        p.name?.trim() ||
+        p.associatedWith?.trim() ||
+        (p.description?.trim()
+          ? p.description.trim().split(".")[0].slice(0, 60)
+          : `Project ${i + 1}`);
 
-          if (p.url) parts.push("URL: " + p.url);
-          if (p.description) parts.push("Description:\n" + p.description);
-          if (Array.isArray(p.skills) && p.skills.length) {
-            parts.push("Skills (top 5): " + p.skills.slice(0, 5).join(", "));
-          }
+      const parts: string[] = ["Project " + (i + 1) + ": " + projectName];
 
-          const start = [p.startMonth, p.startYear].filter(Boolean).join(" ");
-          if (start) parts.push("Start date:     " + start);
+      if (p.url) parts.push("URL: " + p.url);
+      if (p.description) parts.push("Description:\n" + p.description);
+      if (Array.isArray(p.skills) && p.skills.length) {
+        parts.push("Skills (top 5): " + p.skills.slice(0, 5).join(", "));
+      }
 
-          if (p.currentlyWorking) {
-            parts.push("Currently working: Yes");
-          } else {
-            const end = [p.endMonth, p.endYear].filter(Boolean).join(" ");
-            if (end) parts.push("End date:       " + end);
-          }
+      const start = [p.startMonth, p.startYear].filter(Boolean).join(" ");
+      if (start) parts.push("Start date: " + start);
 
-          if (p.associatedWith) parts.push("Associated with: " + p.associatedWith);
+      if (p.currentlyWorking) {
+        parts.push("Currently working: Yes");
+      } else {
+        const end = [p.endMonth, p.endYear].filter(Boolean).join(" ");
+        if (end) parts.push("End date: " + end);
+      }
 
-          return parts.join("\n");
-        })
-        .join("\n\n");
-    }
+      if (p.associatedWith) parts.push("Associated with: " + p.associatedWith);
+
+      return parts.join("\n");
+    })
+    .join("\n\n");
+}
 
     case "experience": {
       if (!Array.isArray(data)) return prettyPrint(data);
@@ -262,6 +322,35 @@ function formatSectionOutput(section: SectionKey, data: unknown): string {
 async function copySectionOutput(section: SectionKey, data: unknown) {
   const text = formatSectionOutput(section, data);
   if (text) await navigator.clipboard.writeText(text);
+}
+
+let razorpayScriptPromise: Promise<boolean> | null = null;
+
+function loadRazorpayScript(): Promise<boolean> {
+  if (typeof window === "undefined") return Promise.resolve(false);
+  if (window.Razorpay) return Promise.resolve(true);
+  if (razorpayScriptPromise) return razorpayScriptPromise;
+
+  razorpayScriptPromise = new Promise<boolean>((resolve) => {
+    const existing = document.querySelector(
+      'script[src="https://checkout.razorpay.com/v1/checkout.js"]'
+    ) as HTMLScriptElement | null;
+
+    if (existing) {
+      existing.addEventListener("load", () => resolve(true), { once: true });
+      existing.addEventListener("error", () => resolve(false), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+
+  return razorpayScriptPromise;
 }
 
 // ─── ATS scorer ───────────────────────────────────────────────────────────────
@@ -807,6 +896,10 @@ function SectionCard({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function OptimizePage() {
+  const router = useRouter();
+  const { isLoaded, isSignedIn} = useAuth();
+  const { openSignIn } = useClerk();
+
   const [file, setFile] = useState<File | null>(null);
   const [fileErr, setFileErr] = useState<string | null>(null);
   const [apiErr, setApiErr] = useState<string | null>(null);
@@ -832,11 +925,14 @@ export default function OptimizePage() {
   const [atsLoading, setAtsLoading] = useState(false);
   const [atsRan, setAtsRan] = useState(false);
   const [pageLoaded, setPageLoaded] = useState(false);
+  const [isGenerateAllUnlocked, setIsGenerateAllUnlocked] = useState(false);
+  const [isPaymentLoading, setIsPaymentLoading] = useState(false);
 
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearing, setClearing] = useState(false);
 
   const resultsRef = useRef<HTMLDivElement>(null);
+  const genAllAbort = useRef<boolean>(false);
 
   useEffect(() => {
     setTimeout(() => setPageLoaded(true), 60);
@@ -862,6 +958,110 @@ export default function OptimizePage() {
     }
   }, [structured, ctx.targetRole]);
 
+useEffect(() => {
+  if (!isLoaded) return;
+
+  // Signed-out users should not restore old cached data,
+  // but should still be able to see results generated in the current session.
+  if (!isSignedIn) {
+    localStorage.removeItem("linkedup_workspace_id");
+    localStorage.removeItem("linkedup_parsed_id");
+    localStorage.removeItem("linkedup_structured_json");
+    localStorage.removeItem("linkedup_ctx_json");
+    return;
+  }
+
+  if (structured && parsedId) return;
+
+  const workspaceId = localStorage.getItem("linkedup_workspace_id");
+  const savedParsedId = localStorage.getItem("linkedup_parsed_id");
+  const savedStructuredJson = localStorage.getItem("linkedup_structured_json");
+  const savedCtxJson = localStorage.getItem("linkedup_ctx_json");
+
+  if (savedParsedId && !parsedId) {
+    setParsedId(savedParsedId);
+  }
+
+  if (!structured && savedStructuredJson) {
+    try {
+      setStructured(JSON.parse(savedStructuredJson) as StructuredResume);
+    } catch {
+      // ignore bad local cache
+    }
+  }
+
+  if (savedCtxJson) {
+    try {
+      setCtx(JSON.parse(savedCtxJson) as UserContext);
+    } catch {
+      // ignore bad local cache
+    }
+  }
+
+  if (!workspaceId || structured) return;
+
+  const restore = async () => {
+    try {
+      const data = await getWorkerWorkspace(workspaceId);
+
+      const structuredJson = data.workspace?.structured_json;
+      const ctxJson = data.workspace?.ctx_json;
+
+      if (structuredJson) {
+        const parsedStructured = JSON.parse(structuredJson) as StructuredResume;
+        setStructured(parsedStructured);
+        localStorage.setItem("linkedup_structured_json", structuredJson);
+      }
+
+      if (ctxJson) {
+        const parsedCtx = JSON.parse(ctxJson) as UserContext;
+        setCtx(parsedCtx);
+        localStorage.setItem("linkedup_ctx_json", ctxJson);
+      }
+    } catch {
+      // ignore restore failure for now
+    }
+  };
+
+  restore();
+}, [isLoaded, isSignedIn, structured, parsedId]);
+
+useEffect(() => {
+  if (!isLoaded || !isSignedIn) return;
+
+  const pendingGenerateAll = localStorage.getItem("linkedup_pending_generate_all");
+  if (pendingGenerateAll !== "1") return;
+
+  const pendingParsedId = localStorage.getItem("linkedup_pending_parsed_id");
+  const pendingStructuredJson = localStorage.getItem("linkedup_pending_structured_json");
+  const pendingCtxJson = localStorage.getItem("linkedup_pending_ctx_json");
+
+  if (!parsedId && pendingParsedId) {
+    setParsedId(pendingParsedId);
+    localStorage.setItem("linkedup_parsed_id", pendingParsedId);
+  }
+
+  if (!structured && pendingStructuredJson) {
+    try {
+      const parsedStructured = JSON.parse(pendingStructuredJson) as StructuredResume;
+      setStructured(parsedStructured);
+      localStorage.setItem("linkedup_structured_json", pendingStructuredJson);
+    } catch {
+      // ignore bad pending structured cache
+    }
+  }
+
+  if (pendingCtxJson) {
+    try {
+      const parsedCtx = JSON.parse(pendingCtxJson) as UserContext;
+      setCtx(parsedCtx);
+      localStorage.setItem("linkedup_ctx_json", pendingCtxJson);
+    } catch {
+      // ignore bad pending ctx cache
+    }
+  }
+}, [isLoaded, isSignedIn, parsedId, structured]);
+
   const topPreview = useMemo(() => (structured?.skills || []).slice(0, 10), [structured]);
   const doneCount = Object.values(sections).filter((s) => s.status === "success").length;
 
@@ -873,9 +1073,130 @@ export default function OptimizePage() {
     return null;
   }
 
-  async function parseResume() {
+  async function parseJsonOrThrow<T>(res: Response): Promise<T> {
+    const json = await res.json();
+
+    if (res.status === 401) {
+      openSignIn?.();
+      throw new Error("Please sign in to continue.");
+    }
+
+    if (!res.ok) {
+      throw new Error((json as { error?: string }).error || "Request failed.");
+    }
+
+    return json as T;
+  }
+
+  function savePendingGenerateAllIntent() {
+  if (typeof window === "undefined") return;
+
+  localStorage.setItem("linkedup_pending_generate_all", "1");
+
+  if (parsedId) {
+    localStorage.setItem("linkedup_pending_parsed_id", parsedId);
+  }
+
+  if (structured) {
+    localStorage.setItem(
+      "linkedup_pending_structured_json",
+      JSON.stringify(structured)
+    );
+  }
+
+  localStorage.setItem("linkedup_pending_ctx_json", JSON.stringify(ctx));
+}
+
+  async function getWorkerWorkspace(workspaceId: string): Promise<{
+    workspace: {
+      structured_json?: string | null;
+      ctx_json?: string | null;
+    };
+  }> {
+    const workerBase = process.env.NEXT_PUBLIC_LINKEDUP_WORKER_URL;
+
+    if (!workerBase) {
+      throw new Error("Missing NEXT_PUBLIC_LINKEDUP_WORKER_URL.");
+    }
+
+    const res = await fetch(
+      `${workerBase}/workspace/get?id=${encodeURIComponent(workspaceId)}`,
+      {
+        method: "GET",
+      }
+    );
+
+    const json = await res.json();
+
+    if (!res.ok || !json?.ok || !json?.workspace) {
+      throw new Error(json?.error || "Failed to load workspace.");
+    }
+
+    return json as {
+      workspace: {
+        structured_json?: string | null;
+        ctx_json?: string | null;
+      };
+    };
+  }
+
+  async function saveParsedWorkspaceToWorker(
+    workspaceId: string,
+    structuredData: StructuredResume,
+    contextData: UserContext
+  ): Promise<void> {
+    const workerBase = process.env.NEXT_PUBLIC_LINKEDUP_WORKER_URL;
+
+    if (!workerBase) {
+      throw new Error("Missing NEXT_PUBLIC_LINKEDUP_WORKER_URL.");
+    }
+
+    const res = await fetch(`${workerBase}/workspace/save-parsed`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        workspaceId,
+        structured: structuredData,
+        ctx: contextData,
+      }),
+    });
+
+    const json = await res.json();
+
+    if (!res.ok || !json?.ok) {
+      throw new Error(json?.error || "Failed to save parsed workspace.");
+    }
+  }
+
+  async function createWorkerWorkspace(uploadFile: File): Promise<string> {
+  const workerBase = process.env.NEXT_PUBLIC_LINKEDUP_WORKER_URL;
+
+  if (!workerBase) {
+    throw new Error("Missing NEXT_PUBLIC_LINKEDUP_WORKER_URL.");
+  }
+
+  const form = new FormData();
+  form.set("file", uploadFile);
+
+  const res = await fetch(`${workerBase}/resume/upload`, {
+    method: "POST",
+    body: form,
+  });
+
+  const json = await res.json();
+
+  if (!res.ok || !json?.ok || !json?.workspaceId) {
+    throw new Error(json?.error || "Failed to create workspace.");
+  }
+
+  return json.workspaceId as string;
+}
+    async function parseResume() {
     setApiErr(null);
     setFileErr(null);
+
     const v = validateBeforeParse();
     if (v) {
       if (!file) setFileErr(v);
@@ -889,6 +1210,7 @@ export default function OptimizePage() {
     setStructured(null);
     setAtsResult(null);
     setAtsRan(false);
+    setIsGenerateAllUnlocked(false);
 
     try {
       const form = new FormData();
@@ -897,23 +1219,47 @@ export default function OptimizePage() {
       form.set("industry", (ctx.industry || "").trim());
       form.set("seniority", String(ctx.seniority as Seniority));
       form.set("mode", String((ctx.mode || "Branding") as OptimizeMode));
-      if (ctx.targetJobText?.trim()) form.set("targetJobText", ctx.targetJobText.trim());
+      if (ctx.targetJobText?.trim()) {
+        form.set("targetJobText", ctx.targetJobText.trim());
+      }
 
-      const res = await fetch("/api/parse-resume", { method: "POST", body: form });
-      const json = (await res.json()) as ParseResponse | { error?: string };
-      if (!res.ok) throw new Error((json as { error?: string }).error || "Resume parsing failed.");
+      const res = await fetch("/api/parse-resume", {
+        method: "POST",
+        body: form,
+      });
 
-      const out = json as ParseResponse;
+      const out = await parseJsonOrThrow<ParseResponse>(res);
+
       setParsedId(out.id);
       setStructured(out.structured);
-      setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 200);
+
+      localStorage.setItem("linkedup_parsed_id", out.id);
+      localStorage.setItem(
+        "linkedup_structured_json",
+        JSON.stringify(out.structured)
+      );
+      localStorage.setItem("linkedup_ctx_json", JSON.stringify(ctx));
+
+      try {
+        const workspaceId = await createWorkerWorkspace(file as File);
+        localStorage.setItem("linkedup_workspace_id", workspaceId);
+        await saveParsedWorkspaceToWorker(workspaceId, out.structured, ctx);
+      } catch (workspaceError) {
+        console.error("Workspace save failed:", workspaceError);
+      }
+
+      setTimeout(() => {
+        resultsRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 200);
     } catch (e: unknown) {
       setApiErr(e instanceof Error ? e.message : "Resume parsing failed.");
     } finally {
       setParseLoading(false);
     }
   }
-
   async function generateSection(section: SectionKey) {
     if (!parsedId) return;
     setApiErr(null);
@@ -925,19 +1271,17 @@ export default function OptimizePage() {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({
-          id: parsedId,
-          section,
-          targetRole: ctx.targetRole,
-          industry: ctx.industry,
-          seniority: ctx.seniority,
-          mode: ctx.mode || "Branding",
-          targetJobText: ctx.targetJobText || "",
-        }),
+  id: parsedId,
+  workspaceId: localStorage.getItem("linkedup_workspace_id") || "",
+  section,
+  targetRole: ctx.targetRole,
+  industry: ctx.industry,
+  seniority: ctx.seniority,
+  mode: ctx.mode || "Branding",
+  targetJobText: ctx.targetJobText || "",
+}),
       });
-      const json = (await res.json()) as SectionResponse | { error?: string };
-      if (!res.ok) throw new Error((json as { error?: string }).error || `Failed to generate ${section}.`);
-
-      const out = json as SectionResponse;
+      const out = await parseJsonOrThrow<SectionResponse>(res);
       setSections((prev) => ({ ...prev, [section]: { status: "success", data: out.data } }));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : `Failed to generate ${section}.`;
@@ -955,7 +1299,153 @@ export default function OptimizePage() {
 
   const [genAllRunning, setGenAllRunning] = useState(false);
   const [genAllIndex, setGenAllIndex] = useState<number>(-1);
-  const genAllAbort = useRef<boolean>(false);
+
+  useEffect(() => {
+  if (!isLoaded || !isSignedIn) return;
+  if (!parsedId || !structured) return;
+  if (isPaymentLoading || isGenerateAllUnlocked || genAllRunning) return;
+
+  const pending = localStorage.getItem("linkedup_pending_generate_all");
+  if (pending !== "1") return;
+
+  const run = async () => {
+    try {
+      setApiErr(null);
+      setIsPaymentLoading(true);
+
+      const paid = await startGenerateAllPayment();
+      if (!paid) return;
+
+      localStorage.removeItem("linkedup_pending_generate_all");
+      localStorage.removeItem("linkedup_pending_parsed_id");
+      localStorage.removeItem("linkedup_pending_structured_json");
+      localStorage.removeItem("linkedup_pending_ctx_json");
+
+      setIsGenerateAllUnlocked(true);
+      await generateAll();
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Payment failed. Please try again.";
+      setApiErr(message);
+    } finally {
+      setIsPaymentLoading(false);
+    }
+  };
+
+  run();
+}, [
+  isLoaded,
+  isSignedIn,
+  parsedId,
+  structured,
+  isPaymentLoading,
+  isGenerateAllUnlocked,
+  genAllRunning,
+]);
+
+  async function startGenerateAllPayment(): Promise<boolean> {
+    const checkoutLoaded = await loadRazorpayScript();
+    if (!checkoutLoaded || !window.Razorpay) {
+      throw new Error("Razorpay Checkout failed to load.");
+    }
+
+    const keyId =
+      process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ||
+      process.env.NEXT_PUBLIC_RAZORPAY_KEY ||
+      "";
+
+    if (!keyId) {
+      throw new Error("Missing NEXT_PUBLIC_RAZORPAY_KEY_ID.");
+    }
+
+    const createRes = await fetch("/api/payments/create-order", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        resultId: parsedId,
+        feature: "generate_all",
+      }),
+    });
+
+    const createJson = (await createRes.json()) as CreateOrderResponse;
+
+    if (!createRes.ok || !createJson.ok || !createJson.orderId) {
+      throw new Error(createJson.error || "Failed to create payment order.");
+    }
+
+    return await new Promise<boolean>((resolve, reject) => {
+      let settled = false;
+
+      const safeResolve = (value: boolean) => {
+        if (!settled) {
+          settled = true;
+          resolve(value);
+        }
+      };
+
+      const safeReject = (error: Error) => {
+        if (!settled) {
+          settled = true;
+          reject(error);
+        }
+      };
+
+      const checkout = new window.Razorpay!({
+        key: createJson.keyId || keyId,
+        amount: createJson.amount,
+        currency: createJson.currency || "INR",
+        name: "LinkedIn Optimizer",
+        description: "Unlock Generate All",
+        order_id: createJson.orderId,
+        prefill: {
+          name: structured?.basics?.name || "",
+          email: structured?.basics?.email || "",
+          contact: structured?.basics?.phone || "",
+        },
+        theme: {
+          color: LI_BLUE,
+        },
+        modal: {
+          ondismiss: () => safeResolve(false),
+        },
+        handler: async (response: RazorpayCheckoutResponse) => {
+          try {
+            const verifyRes = await fetch("/api/payments/verify", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json",
+              },
+              body: JSON.stringify({
+                resultId: parsedId,
+                feature: "generate_all",
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature,
+              }),
+            });
+
+            const verifyJson = (await verifyRes.json()) as VerifyPaymentResponse;
+
+            if (!verifyRes.ok || !verifyJson.ok) {
+              throw new Error(verifyJson.error || "Payment verification failed.");
+            }
+
+            safeResolve(true);
+          } catch (error: unknown) {
+            const message =
+              error instanceof Error ? error.message : "Payment verification failed.";
+            safeReject(new Error(message));
+          }
+        },
+      });
+
+      checkout.open();
+    });
+  }
 
   async function generateAll() {
     if (!parsedId || genAllRunning) return;
@@ -980,6 +1470,7 @@ export default function OptimizePage() {
           headers: { "Content-Type": "application/json", Accept: "application/json" },
           body: JSON.stringify({
             id: parsedId,
+            workspaceId: localStorage.getItem("linkedup_workspace_id") || "",
             section,
             targetRole: ctx.targetRole,
             industry: ctx.industry,
@@ -988,9 +1479,7 @@ export default function OptimizePage() {
             targetJobText: ctx.targetJobText || "",
           }),
         });
-        const json = (await res.json()) as SectionResponse | { error?: string };
-        if (!res.ok) throw new Error((json as { error?: string }).error || "Failed: " + section);
-        const out = json as SectionResponse;
+        const out = await parseJsonOrThrow<SectionResponse>(res);
         setSections((prev) => ({ ...prev, [section]: { status: "success", data: out.data } }));
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Failed: " + section;
@@ -1006,6 +1495,42 @@ export default function OptimizePage() {
     setGenAllRunning(false);
     setGenAllIndex(-1);
     setActiveSection(null);
+  }
+
+  async function handleGenerateAllClick() {
+    if (doneCount === SECTION_ORDER.length || genAllRunning || isPaymentLoading) {
+      return;
+    }
+
+    if (!isLoaded) return;
+
+    if (!isSignedIn) {
+      savePendingGenerateAllIntent();
+      openSignIn?.();
+      return;
+    }
+
+    if (isGenerateAllUnlocked) {
+      await generateAll();
+      return;
+    }
+
+    setApiErr(null);
+    setIsPaymentLoading(true);
+
+    try {
+      const paid = await startGenerateAllPayment();
+      if (!paid) return;
+
+      setIsGenerateAllUnlocked(true);
+      await generateAll();
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Payment failed. Please try again.";
+      setApiErr(message);
+    } finally {
+      setIsPaymentLoading(false);
+    }
   }
 
   function stopGenAll() {
@@ -1025,8 +1550,9 @@ export default function OptimizePage() {
     }, 1200);
   }
 
-  async function handleStartOver() {
+    async function handleStartOver() {
     setClearing(true);
+
     try {
       if (parsedId) {
         await fetch("/api/clear-session", {
@@ -1042,7 +1568,13 @@ export default function OptimizePage() {
     setFile(null);
     setFileErr(null);
     setApiErr(null);
-    setCtx({ targetRole: "", industry: "", seniority: "Mid", mode: "Branding", targetJobText: "" });
+    setCtx({
+      targetRole: "",
+      industry: "",
+      seniority: "Mid",
+      mode: "Branding",
+      targetJobText: "",
+    });
     setParsedId("");
     setStructured(null);
     setSections(makeInitialSections());
@@ -1053,9 +1585,21 @@ export default function OptimizePage() {
     setActiveTab("sections");
     setGenAllRunning(false);
     setGenAllIndex(-1);
+    setIsGenerateAllUnlocked(false);
+    setIsPaymentLoading(false);
     genAllAbort.current = true;
     setShowClearConfirm(false);
     setClearing(false);
+
+    localStorage.removeItem("linkedup_workspace_id");
+    localStorage.removeItem("linkedup_parsed_id");
+    localStorage.removeItem("linkedup_pending_generate_all");
+    localStorage.removeItem("linkedup_structured_json");
+    localStorage.removeItem("linkedup_ctx_json");
+    localStorage.removeItem("linkedup_pending_parsed_id");
+    localStorage.removeItem("linkedup_pending_structured_json");
+    localStorage.removeItem("linkedup_pending_ctx_json");
+
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -1300,7 +1844,7 @@ export default function OptimizePage() {
                 <p style={{ fontSize: 13, color: "rgba(255,255,255,0.45)" }}>Resume successfully parsed. Generate sections individually below.</p>
               </div>
               <div style={{ padding: "4px 14px", borderRadius: 99, fontSize: 11, fontFamily: "monospace", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.35)" }}>
-                Session: {parsedId}
+                Draft ID: {parsedId}
               </div>
             </div>
 
@@ -1349,22 +1893,105 @@ export default function OptimizePage() {
           <section style={{ animation: "liFadeUp 0.5s ease 0.1s both" }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 }}>
               {[
-                { label: "Sections", value: doneCount + "/" + SECTION_ORDER.length, sub: "optimized", color: "#93c5fd" },
+                {
+                  label: "Sections",
+                  value: doneCount + "/" + SECTION_ORDER.length,
+                  sub: "optimized",
+                  color: "#93c5fd",
+                  locked: false,
+                },
                 {
                   label: "ATS Score",
                   value: atsResult ? String(atsResult.overallScore) : "—",
                   sub: atsResult ? "Grade " + atsResult.grade : "run below",
-                  color: atsResult ? (atsResult.overallScore >= 80 ? "#22c55e" : atsResult.overallScore >= 60 ? "#fbbf24" : "#f87171") : "rgba(255,255,255,0.2)",
+                  color: atsResult
+                    ? atsResult.overallScore >= 80
+                      ? "#22c55e"
+                      : atsResult.overallScore >= 60
+                        ? "#fbbf24"
+                        : "#f87171"
+                    : "rgba(255,255,255,0.2)",
+                  locked: false,
                 },
-                { label: "Keywords", value: atsResult ? String(atsResult.keywordsFound.length) : "—", sub: "matched", color: "#22c55e" },
-                { label: "Gaps", value: atsResult ? String(atsResult.keywordsMissing.length) : "—", sub: "to fill", color: "#fbbf24" },
+                {
+                  label: "Keywords",
+                  value: atsResult ? String(atsResult.keywordsFound.length) : "—",
+                  sub: "matched",
+                  color: "#22c55e",
+                  locked: false,
+                },
+                {
+                  label: "Gaps",
+                  value: atsResult ? String(atsResult.keywordsMissing.length) : "—",
+                  sub: "to fill",
+                  color: "#fbbf24",
+                  locked: !isGenerateAllUnlocked,
+                },
               ].map((s, i) => (
-                <div key={s.label} style={{ borderRadius: 14, padding: "15px 18px", background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)", animation: "liFadeUp 0.4s ease " + i * 0.06 + "s both" }}>
-                  <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(255,255,255,0.35)", marginBottom: 4 }}>{s.label}</p>
-                  <p style={{ fontSize: 28, fontWeight: 800, color: s.color, lineHeight: 1 }}>
-                    {atsResult && s.label === "ATS Score" ? <AnimatedNumber to={atsResult.overallScore} /> : s.value}
+                <div
+                  key={s.label}
+                  style={{
+                    borderRadius: 14,
+                    padding: "15px 18px",
+                    background: "rgba(255,255,255,0.025)",
+                    border: "1px solid rgba(255,255,255,0.07)",
+                    animation: "liFadeUp 0.4s ease " + i * 0.06 + "s both",
+                    position: "relative",
+                    overflow: "hidden",
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: 11,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      color: "rgba(255,255,255,0.35)",
+                      marginBottom: 4,
+                    }}
+                  >
+                    {s.label}
                   </p>
-                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 3 }}>{s.sub}</p>
+
+                  <div style={{ position: "relative" }}>
+                    <p
+                      style={{
+                        fontSize: 28,
+                        fontWeight: 800,
+                        color: s.color,
+                        lineHeight: 1,
+                        filter: s.locked ? "blur(8px)" : "none",
+                        transition: "filter 0.2s ease",
+                        userSelect: s.locked ? "none" : "auto",
+                      }}
+                    >
+                      {atsResult && s.label === "ATS Score" ? (
+                        <AnimatedNumber to={atsResult.overallScore} />
+                      ) : (
+                        s.value
+                      )}
+                    </p>
+
+                    {s.locked && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          pointerEvents: "none",
+                          fontSize: 13,
+                          color: "rgba(255,255,255,0.55)",
+                        }}
+                      >
+                        🔒
+                      </div>
+                    )}
+                  </div>
+
+                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 3 }}>
+                    {s.locked ? "unlock after payment" : s.sub}
+                  </p>
                 </div>
               ))}
             </div>
@@ -1398,26 +2025,50 @@ export default function OptimizePage() {
                 <div style={{ marginLeft: 8, display: "flex", alignItems: "center", gap: 8 }}>
                   {!genAllRunning ? (
                     <button
-                      onClick={generateAll}
-                      disabled={doneCount === SECTION_ORDER.length}
+                      onClick={handleGenerateAllClick}
+                      disabled={doneCount === SECTION_ORDER.length || isPaymentLoading}
                       style={{
                         padding: "8px 18px",
                         borderRadius: 10,
                         fontSize: 13,
                         fontWeight: 700,
-                        cursor: doneCount === SECTION_ORDER.length ? "not-allowed" : "pointer",
-                        background: doneCount === SECTION_ORDER.length ? "rgba(255,255,255,0.06)" : "linear-gradient(135deg," + LI_BLUE + ",#0077b5)",
+                        cursor:
+                          doneCount === SECTION_ORDER.length || isPaymentLoading
+                            ? "not-allowed"
+                            : "pointer",
+                        background:
+                          doneCount === SECTION_ORDER.length || isPaymentLoading
+                            ? "rgba(255,255,255,0.06)"
+                            : "linear-gradient(135deg," + LI_BLUE + ",#0077b5)",
                         border: "none",
-                        color: doneCount === SECTION_ORDER.length ? "rgba(255,255,255,0.25)" : "white",
-                        boxShadow: doneCount === SECTION_ORDER.length ? "none" : "0 3px 14px rgba(10,102,194,0.45)",
+                        color:
+                          doneCount === SECTION_ORDER.length || isPaymentLoading
+                            ? "rgba(255,255,255,0.25)"
+                            : "white",
+                        boxShadow:
+                          doneCount === SECTION_ORDER.length || isPaymentLoading
+                            ? "none"
+                            : "0 3px 14px rgba(10,102,194,0.45)",
                         transition: "all 0.2s",
                         display: "flex",
                         alignItems: "center",
                         gap: 7,
                       }}
                     >
-                      <span style={{ fontSize: 15 }}>⚡</span>
-                      {doneCount === SECTION_ORDER.length ? "All done" : "Generate All"}
+                      <span style={{ fontSize: 15 }}>
+                        {isGenerateAllUnlocked ? "⚡" : "🔒"}
+                      </span>
+                      {doneCount === SECTION_ORDER.length
+                        ? "All done"
+                        : isPaymentLoading
+                          ? "Opening checkout..."
+                          : !isLoaded
+                            ? "Loading..."
+                            : !isSignedIn
+                              ? "Sign in to Unlock Generate All"
+                              : isGenerateAllUnlocked
+                                ? "Generate All"
+                                : "Unlock Generate All"}
                     </button>
                   ) : (
                     <button
@@ -1585,21 +2236,104 @@ export default function OptimizePage() {
                       </p>
                     </div>
 
-                    <div style={{ borderRadius: 18, padding: 20, background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.2)" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                        <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#ef4444", boxShadow: "0 0 7px #ef444466" }} />
-                        <span style={{ fontSize: 13, fontWeight: 700, color: "#fca5a5" }}>Keyword Gaps</span>
-                        <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: "monospace", color: "rgba(255,255,255,0.3)" }}>{atsResult.keywordsMissing.length} missing</span>
+                    <div
+                      style={{
+                        borderRadius: 18,
+                        padding: 20,
+                        background: "rgba(239,68,68,0.05)",
+                        border: "1px solid rgba(239,68,68,0.2)",
+                        position: "relative",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <div
+                        style={{
+                          filter: !isGenerateAllUnlocked ? "blur(10px)" : "none",
+                          transition: "filter 0.2s ease",
+                          pointerEvents: !isGenerateAllUnlocked ? "none" : "auto",
+                          userSelect: !isGenerateAllUnlocked ? "none" : "auto",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                          <div
+                            style={{
+                              width: 7,
+                              height: 7,
+                              borderRadius: "50%",
+                              background: "#ef4444",
+                              boxShadow: "0 0 7px #ef444466",
+                            }}
+                          />
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "#fca5a5" }}>
+                            Keyword Gaps
+                          </span>
+                          <span
+                            style={{
+                              marginLeft: "auto",
+                              fontSize: 11,
+                              fontFamily: "monospace",
+                              color: "rgba(255,255,255,0.3)",
+                            }}
+                          >
+                            {atsResult.keywordsMissing.length} missing
+                          </span>
+                        </div>
+
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+                          {atsResult.keywordsMissing.map((kw, i) => (
+                            <KwChip key={kw} word={kw} found={false} delay={i * 60} />
+                          ))}
+                          {atsResult.keywordsMissing.length === 0 && (
+                            <span style={{ fontSize: 13, color: "#4ade80" }}>
+                              ✓ No major gaps detected
+                            </span>
+                          )}
+                        </div>
+
+                        <p style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", lineHeight: 1.6 }}>
+                          Add these to your Skills section and work them into bullets where accurate.
+                        </p>
                       </div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
-                        {atsResult.keywordsMissing.map((kw, i) => (
-                          <KwChip key={kw} word={kw} found={false} delay={i * 60} />
-                        ))}
-                        {atsResult.keywordsMissing.length === 0 && <span style={{ fontSize: 13, color: "#4ade80" }}>✓ No major gaps detected</span>}
-                      </div>
-                      <p style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", lineHeight: 1.6 }}>
-                        Add these to your Skills section and work them into bullets where accurate.
-                      </p>
+
+                      {!isGenerateAllUnlocked && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: 20,
+                            background: "rgba(3,8,20,0.12)",
+                          }}
+                        >
+                          <div
+                            style={{
+                              textAlign: "center",
+                              borderRadius: 14,
+                              padding: "14px 18px",
+                              background: "rgba(0,0,0,0.35)",
+                              border: "1px solid rgba(255,255,255,0.08)",
+                              backdropFilter: "blur(6px)",
+                            }}
+                          >
+                            <div style={{ fontSize: 18, marginBottom: 6 }}>🔒</div>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: "white" }}>
+                              Keyword gaps unlock after payment
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 11,
+                                color: "rgba(255,255,255,0.55)",
+                                marginTop: 4,
+                                lineHeight: 1.5,
+                              }}
+                            >
+                              Pay through Generate All to reveal missing keywords.
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div style={{ gridColumn: "span 2", borderRadius: 18, padding: 20, background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}>

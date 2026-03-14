@@ -52,14 +52,14 @@ const MODEL_RICH =
 
 // Token budgets — tuned per section
 const TOKEN_BUDGETS: Record<SectionKey | "structuring", number> = {
-  structuring:      3200, // raised — resumes with 5+ roles + skills need 2500–3200 tokens
-  headline:          120,
-  about:             600,
-  experience:        350, // per role
-  skills:            300,
-  certifications:    600, // raised from 200 — 3-5 cert objects with all fields needs ~500 tokens
-  projects:          700, // raised — LinkedIn project fields: name, description, skills, dates, association
-  banner_tagline:     60,
+  structuring: 3200,
+  headline: 120,
+  about: 600,
+  experience: 350,
+  skills: 300,
+  certifications: 600,
+  projects: 700,
+  banner_tagline: 60,
   positioning_advice: 700,
 };
 
@@ -74,8 +74,9 @@ async function pace() {
 }
 
 function resolveMode(mode?: string): OptimizeMode {
-  if (mode === "Branding" || mode === "Recruiter" || mode === "Executive")
+  if (mode === "Branding" || mode === "Recruiter" || mode === "Executive") {
     return mode;
+  }
   return DEFAULT_MODE;
 }
 
@@ -178,22 +179,26 @@ function sanitizeRole(
   generated: Partial<ResumeRole> | undefined,
   fallback: ResumeRole
 ): ResumeRole {
-  const bullets = Array.isArray(generated?.bullets) && generated!.bullets.length
-    ? generated!.bullets
-    : fallback.bullets;
+  const bullets =
+    Array.isArray(generated?.bullets) && generated.bullets.length
+      ? generated.bullets
+      : fallback.bullets;
 
-  const generatedSkills = Array.isArray(generated?.skills) && generated!.skills.length
-    ? (generated!.skills as string[]).slice(0, 8)
-    : Array.isArray(fallback.skills) ? fallback.skills.slice(0, 8) : [];
+  const generatedSkills =
+    Array.isArray(generated?.skills) && generated.skills.length
+      ? (generated.skills as string[]).slice(0, 8)
+      : Array.isArray(fallback.skills)
+        ? fallback.skills.slice(0, 8)
+        : [];
 
   return {
-    company:   clean(fallback.company, 200), // Always preserve original
-    title:     clean(fallback.title, 200),   // Always preserve original
-    location:  clean(generated?.location || fallback.location, 200) || undefined,
+    company: clean(fallback.company, 200),
+    title: clean(fallback.title, 200),
+    location: clean(generated?.location || fallback.location, 200) || undefined,
     startDate: clean(fallback.startDate, 50) || undefined,
-    endDate:   clean(fallback.endDate, 50) || undefined,
-    bullets:   cleanArr(bullets, 3, 280),
-    skills:    generatedSkills.length ? generatedSkills : undefined,
+    endDate: clean(fallback.endDate, 50) || undefined,
+    bullets: cleanArr(bullets, 3, 280),
+    skills: generatedSkills.length ? generatedSkills : undefined,
   };
 }
 
@@ -235,8 +240,9 @@ async function rewriteExperienceSeparately(
       });
       rewritten.push(sanitizeRole(roleOut, role));
     } catch (err) {
-      // Graceful degradation: keep original role on failure
-      console.warn(`[optimizer] Experience role rewrite failed for "${role.title}", keeping original. Error: ${err}`);
+      console.warn(
+        `[optimizer] Experience role rewrite failed for "${role.title}", keeping original. Error: ${err}`
+      );
       rewritten.push(role);
     }
     await pace();
@@ -263,7 +269,6 @@ export async function generateSectionData(
         maxOutputTokens: TOKEN_BUDGETS.headline,
         temperature: 0.15,
       });
-      // Strip quotes if model wraps output
       return clean(out.replace(/^["']|["']$/g, ""), 220);
     }
 
@@ -365,28 +370,39 @@ async function generateOneMode(
   await pace();
 
   const experience = (await generateSectionData(llm, structured, modeCtx, "experience")) as ResumeRole[];
-  // pace() already called inside rewriteExperienceSeparately
 
   const skills = (await generateSectionData(llm, structured, modeCtx, "skills")) as string[];
   await pace();
 
   const certifications = (await generateSectionData(
-    llm, structured, modeCtx, "certifications"
+    llm,
+    structured,
+    modeCtx,
+    "certifications"
   )) as BrandingVersion["certifications"];
   await pace();
 
   const projects = (await generateSectionData(
-    llm, structured, modeCtx, "projects"
+    llm,
+    structured,
+    modeCtx,
+    "projects"
   )) as BrandingVersion["projects"];
   await pace();
 
   const banner_tagline = (await generateSectionData(
-    llm, structured, modeCtx, "banner_tagline"
+    llm,
+    structured,
+    modeCtx,
+    "banner_tagline"
   )) as string;
   await pace();
 
   const positioning_advice = (await generateSectionData(
-    llm, structured, modeCtx, "positioning_advice"
+    llm,
+    structured,
+    modeCtx,
+    "positioning_advice"
   )) as string;
 
   const profile: BrandingVersion = {
@@ -407,10 +423,6 @@ async function generateOneMode(
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-/**
- * Step 1: Parse resume and create session.
- * Returns session id + structured profile preview.
- */
 export async function parseResumeSession(file: UploadedFile, ctx: UserContext) {
   const llm = createLLMClient();
 
@@ -449,8 +461,33 @@ export async function parseResumeSession(file: UploadedFile, ctx: UserContext) {
 }
 
 /**
+ * Use parsed structured resume directly, without requiring in-memory session storage.
+ * This is the fallback path for worker-restored workspaces.
+ */
+export async function optimizeSectionFromStructured(
+  structuredInput: StructuredResume,
+  section: SectionKey,
+  ctxInput: UserContext
+) {
+  const llm = createLLMClient();
+  const structured = sanitizeStructuredResume(structuredInput);
+  const mergedCtx = mergeContext(
+    {
+      targetRole: "",
+      industry: "",
+      seniority: "Mid",
+      mode: DEFAULT_MODE,
+      targetJobText: "",
+    },
+    ctxInput
+  );
+
+  const data = await generateSectionData(llm, structured, mergedCtx, section);
+  return data;
+}
+
+/**
  * Step 2: Generate a single section using the parsed session.
- * Context overrides are merged so the user can change mode/role between calls.
  */
 export async function optimizeSectionFromSession(
   id: string,
@@ -458,12 +495,13 @@ export async function optimizeSectionFromSession(
   overrides?: Partial<UserContext>
 ) {
   const session = getParseSession(id);
-  if (!session) throw new Error("Session not found or expired. Please re-parse your resume.");
+  if (!session) {
+    throw new Error("Session not found or expired. Please re-parse your resume.");
+  }
 
   const llm = createLLMClient();
   const mergedCtx = mergeContext(session.ctx, overrides);
 
-  // Persist context updates to session
   updateParseSession(id, { ctx: mergedCtx });
 
   const data = await generateSectionData(llm, session.structured, mergedCtx, section);
@@ -473,8 +511,7 @@ export async function optimizeSectionFromSession(
 }
 
 /**
- * Legacy bulk pipeline (kept for /api/optimize compatibility).
- * Prefer the parse+section-by-section flow for new UI.
+ * Legacy bulk pipeline.
  */
 export async function runOptimizationPipeline(
   file: UploadedFile,

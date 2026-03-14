@@ -1,4 +1,3 @@
-// app/api/optimize/route.ts
 import { NextResponse } from "next/server";
 import { runOptimizationPipeline } from "@/lib/optimizer";
 import type { Seniority, OptimizeMode, UserContext } from "@/lib/types";
@@ -25,8 +24,6 @@ export async function POST(req: Request) {
     const targetRole = String(form.get("targetRole") || "").trim();
     const industry = String(form.get("industry") || "").trim();
     const seniority = String(form.get("seniority") || "Mid") as Seniority;
-
-    // Default to ONE mode only
     const mode = String(form.get("mode") || "Branding").trim() as OptimizeMode;
 
     const targetJobText = String(form.get("targetJobText") || "")
