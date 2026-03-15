@@ -5,6 +5,7 @@ import { ClerkProvider, SignInButton } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
 import InactivitySignOut from "@/components/InactivitySignOut";
 import HeaderSignOut from "@/components/HeaderSignOut";
+import FlashToastProvider from "@/components/FlashToastProvider";
 
 export const metadata: Metadata = {
   title: "LinkedUp — AI LinkedIn Optimizer",
@@ -35,17 +36,18 @@ export default async function RootLayout({
         </head>
         <body className="min-h-screen text-white">
           <InactivitySignOut />
+          <FlashToastProvider />
 
-          <div className="mx-auto max-w-7xl px-5 py-6 md:px-6 md:py-8">
+          <div className="mx-auto max-w-7xl px-4 py-5 sm:px-5 md:px-6 md:py-8">
             <div className="mb-4 flex items-center justify-center">
-              <Link href="/" className="flex flex-col items-center">
+              <Link href="/" className="flex flex-col items-center text-center">
                 <img
                   src="/logo.svg"
                   alt="LinkedUp logo"
                   height={36}
                   style={{ height: 36, width: "auto" }}
                 />
-                <div className="flex flex-col items-center">
+                <div className="mt-1 flex flex-col items-center">
                   <span className="text-2xl font-bold leading-none tracking-tight text-white">
                     Linked
                     <span className="text-[color:var(--luna-200)]">Up</span>
@@ -57,10 +59,10 @@ export default async function RootLayout({
               </Link>
             </div>
 
-            <header className="mb-8 rounded-2xl border border-white/10 bg-black/25 backdrop-blur-xl">
-              <div className="flex flex-col gap-4 px-5 py-4 md:flex-row md:items-center md:justify-between">
+            <header className="mb-8 rounded-[24px] border border-white/10 bg-black/30 shadow-[0_20px_70px_rgba(0,0,0,0.24)] backdrop-blur-2xl">
+              <div className="flex flex-col gap-4 px-4 py-4 sm:px-5 md:flex-row md:items-center md:justify-between">
                 <Link href="/" className="group">
-                  <div className="text-xl font-semibold tracking-tight">
+                  <div className="text-lg font-semibold tracking-tight sm:text-xl">
                     <span className="text-white">AI</span>{" "}
                     <span className="text-[color:var(--luna-200)] transition group-hover:text-[color:var(--luna-100)]">
                       LinkedIn Optimizer
@@ -71,8 +73,8 @@ export default async function RootLayout({
                   </div>
                 </Link>
 
-                <div className="flex items-center gap-3">
-                  <nav className="flex items-center gap-2">
+                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                  <nav className="flex flex-wrap items-center gap-2">
                     {nav.map((item) => (
                       <Link
                         key={item.href}

@@ -7,6 +7,7 @@ import { useAuth, useClerk } from "@clerk/nextjs";
 
 import { ResumeUpload } from "@/components/ResumeUpload";
 import { OptimizationSettings } from "@/components/OptimizationSettings";
+import { flash } from "@/lib/flashToast";
 
 import type {
   OptimizeMode,
@@ -15,8 +16,6 @@ import type {
   StructuredResume,
   UserContext,
 } from "@/lib/types";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 type SectionState<T = unknown> = {
   status: "idle" | "loading" | "success" | "error";
@@ -142,29 +141,72 @@ type WorkspaceSummary = {
 
 declare global {
   interface Window {
-    Razorpay?: new (options: RazorpayCheckoutOptions) => RazorpayCheckoutInstance;
+    Razorpay?: new (
+      options: RazorpayCheckoutOptions
+    ) => RazorpayCheckoutInstance;
   }
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const SECTION_ORDER: Array<{ key: SectionKey; title: string; desc: string; icon: string }> = [
-  { key: "headline", title: "Headline", desc: "220-character LinkedIn headline optimized for your target role.", icon: "✦" },
-  { key: "about", title: "About", desc: "200-400 word summary that hooks and converts.", icon: "◎" },
-  { key: "experience", title: "Experience", desc: "Rewrite role bullets with impact and strong action verbs.", icon: "◈" },
-  { key: "skills", title: "Skills", desc: "25-40 keywords tuned to recruiter searches.", icon: "⬡" },
-  { key: "certifications", title: "Certifications", desc: "Normalize and reorder certifications by relevance.", icon: "✪" },
-  { key: "projects", title: "Projects", desc: "Clarify tech stack, scope, and measurable outcome.", icon: "◧" },
-  { key: "banner_tagline", title: "Banner Tagline", desc: "3-8 word tagline for your LinkedIn banner image.", icon: "▣" },
-  { key: "positioning_advice", title: "Strategy", desc: "Full positioning angle, keyword plan, and outreach pitch.", icon: "⚡" },
+const SECTION_ORDER: Array<{
+  key: SectionKey;
+  title: string;
+  desc: string;
+  icon: string;
+}> = [
+  {
+    key: "headline",
+    title: "Headline",
+    desc: "220-character LinkedIn headline optimized for your target role.",
+    icon: "✦",
+  },
+  {
+    key: "about",
+    title: "About",
+    desc: "200-400 word summary that hooks and converts.",
+    icon: "◎",
+  },
+  {
+    key: "experience",
+    title: "Experience",
+    desc: "Rewrite role bullets with impact and strong action verbs.",
+    icon: "◈",
+  },
+  {
+    key: "skills",
+    title: "Skills",
+    desc: "25-40 keywords tuned to recruiter searches.",
+    icon: "⬡",
+  },
+  {
+    key: "certifications",
+    title: "Certifications",
+    desc: "Normalize and reorder certifications by relevance.",
+    icon: "✪",
+  },
+  {
+    key: "projects",
+    title: "Projects",
+    desc: "Clarify tech stack, scope, and measurable outcome.",
+    icon: "◧",
+  },
+  {
+    key: "banner_tagline",
+    title: "Banner Tagline",
+    desc: "3-8 word tagline for your LinkedIn banner image.",
+    icon: "▣",
+  },
+  {
+    key: "positioning_advice",
+    title: "Strategy",
+    desc: "Full positioning angle, keyword plan, and outreach pitch.",
+    icon: "⚡",
+  },
 ];
 
 const LI_BLUE = "#0a66c2";
 const LI_LIGHT = "#378fe9";
 const LI_SUBTLE = "rgba(10,102,194,0.15)";
 const LI_BORDER = "rgba(10,102,194,0.3)";
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeInitialSections(): Record<SectionKey, SectionState> {
   return {
@@ -192,7 +234,8 @@ function countSuccessfulSections(
   input?: Record<SectionKey, SectionState> | null
 ): number {
   if (!input) return 0;
-  return Object.values(input).filter((section) => section?.status === "success").length;
+  return Object.values(input).filter((section) => section?.status === "success")
+    .length;
 }
 
 function prettyPrint(value: unknown): string {
@@ -219,13 +262,34 @@ function formatSectionOutput(section: SectionKey, data: unknown): string {
       if (!Array.isArray(data)) return prettyPrint(data);
       const skills = data as string[];
       const CATS: [string, RegExp][] = [
-        ["Programming Languages", /\b(python|scala|java|go|rust|c\+\+|r\b|sql|bash|shell|typescript|javascript|node)\b/i],
-        ["Data & ETL Frameworks", /\b(spark|pyspark|hadoop|hive|kafka|flink|airflow|dbt|beam|nifi|ssis|matillion|talend|informatica|sqoop|flume)\b/i],
-        ["Cloud & Infrastructure", /\b(aws|azure|gcp|google cloud|snowflake|databricks|redshift|bigquery|s3|ec2|lambda|terraform|kubernetes|docker|ci\/cd)\b/i],
-        ["Databases", /\b(postgresql|mysql|mongodb|redis|cassandra|elasticsearch|oracle|sql server|dynamodb|cosmos|neo4j|hbase|sqlite)\b/i],
-        ["BI & Visualisation", /\b(tableau|power bi|looker|quicksight|grafana|superset|metabase|d3|plotly|matplotlib|seaborn)\b/i],
-        ["Data Science & ML", /\b(machine learning|deep learning|nlp|pytorch|tensorflow|scikit|keras|feature engineering|statistics|pandas|numpy|jupyter)\b/i],
-        ["Methodologies", /\b(agile|scrum|kanban|data governance|data modeling|erd|data quality|etl|elt|data mesh|data lakehouse|dimensional modeling|devops|restful|api)\b/i],
+        [
+          "Programming Languages",
+          /\b(python|scala|java|go|rust|c\+\+|r\b|sql|bash|shell|typescript|javascript|node)\b/i,
+        ],
+        [
+          "Data & ETL Frameworks",
+          /\b(spark|pyspark|hadoop|hive|kafka|flink|airflow|dbt|beam|nifi|ssis|matillion|talend|informatica|sqoop|flume)\b/i,
+        ],
+        [
+          "Cloud & Infrastructure",
+          /\b(aws|azure|gcp|google cloud|snowflake|databricks|redshift|bigquery|s3|ec2|lambda|terraform|kubernetes|docker|ci\/cd)\b/i,
+        ],
+        [
+          "Databases",
+          /\b(postgresql|mysql|mongodb|redis|cassandra|elasticsearch|oracle|sql server|dynamodb|cosmos|neo4j|hbase|sqlite)\b/i,
+        ],
+        [
+          "BI & Visualisation",
+          /\b(tableau|power bi|looker|quicksight|grafana|superset|metabase|d3|plotly|matplotlib|seaborn)\b/i,
+        ],
+        [
+          "Data Science & ML",
+          /\b(machine learning|deep learning|nlp|pytorch|tensorflow|scikit|keras|feature engineering|statistics|pandas|numpy|jupyter)\b/i,
+        ],
+        [
+          "Methodologies",
+          /\b(agile|scrum|kanban|data governance|data modeling|erd|data quality|etl|elt|data mesh|data lakehouse|dimensional modeling|devops|restful|api)\b/i,
+        ],
       ];
       const assigned = new Set<string>();
       const buckets: Record<string, string[]> = {};
@@ -268,7 +332,9 @@ function formatSectionOutput(section: SectionKey, data: unknown): string {
           const issued = [c.issueMonth, c.issueYear].filter(Boolean).join(" ");
           if (issued) parts.push("Issue date: " + issued);
 
-          const expiry = [c.expiryMonth, c.expiryYear].filter(Boolean).join(" ");
+          const expiry = [c.expiryMonth, c.expiryYear]
+            .filter(Boolean)
+            .join(" ");
           if (expiry) parts.push("Expiration: " + expiry);
 
           if (c.credentialId) parts.push("Credential ID: " + c.credentialId);
@@ -379,9 +445,10 @@ function loadRazorpayScript(): Promise<boolean> {
   return razorpayScriptPromise;
 }
 
-// ─── ATS scorer ───────────────────────────────────────────────────────────────
-
-function scoreResumeDeterministic(structured: StructuredResume, targetRole: string): ATSResult {
+function scoreResumeDeterministic(
+  structured: StructuredResume,
+  targetRole: string
+): ATSResult {
   const issues: ATSIssue[] = [];
   const categories: ATSCategory[] = [];
 
@@ -431,7 +498,8 @@ function scoreResumeDeterministic(structured: StructuredResume, targetRole: stri
   let fmt = 20;
   const allBullets = (structured.experience || []).flatMap((r) => r.bullets || []);
   const avgLen = allBullets.length
-    ? allBullets.reduce((s, b) => s + b.split(/\s+/).length, 0) / allBullets.length
+    ? allBullets.reduce((s, b) => s + b.split(/\s+/).length, 0) /
+      allBullets.length
     : 0;
 
   if (avgLen > 35) {
@@ -450,7 +518,9 @@ function scoreResumeDeterministic(structured: StructuredResume, targetRole: stri
       fix: "Expand bullets: what you did, with which tool, and what the outcome was.",
     });
   }
-  const sparseRoles = (structured.experience || []).filter((r) => (r.bullets || []).length < 2);
+  const sparseRoles = (structured.experience || []).filter(
+    (r) => (r.bullets || []).length < 2
+  );
   if (sparseRoles.length) {
     fmt -= 4;
     issues.push({
@@ -481,19 +551,22 @@ function scoreResumeDeterministic(structured: StructuredResume, targetRole: stri
     issues.push({
       severity: weakCount >= 3 ? "critical" : "warning",
       message: `${weakCount} bullet(s) start with weak phrases like "Responsible for"`,
-      fix: `Replace with strong past-tense verbs: "Automated", "Reduced", "Delivered", "Led", "Built".`,
+      fix: 'Replace with strong past-tense verbs: "Automated", "Reduced", "Delivered", "Led", "Built".',
     });
   }
 
   const metricRatio = allBullets.length
-    ? allBullets.filter((b) => /\d+[\s%xX]|[$£€]\d|\d+[km+]/i.test(b)).length / allBullets.length
+    ? allBullets.filter((b) => /\d+[\s%xX]|[$£€]\d|\d+[km+]/i.test(b)).length /
+      allBullets.length
     : 0;
 
   if (metricRatio < 0.25 && allBullets.length >= 4) {
     impact -= 6;
     issues.push({
       severity: "warning",
-      message: `Only ${Math.round(metricRatio * 100)}% of bullets have measurable outcomes (target: 30%+)`,
+      message: `Only ${Math.round(
+        metricRatio * 100
+      )}% of bullets have measurable outcomes (target: 30%+)`,
       fix: "Add numbers, percentages, dollar amounts, or team sizes wherever plausible.",
     });
   }
@@ -501,7 +574,9 @@ function scoreResumeDeterministic(structured: StructuredResume, targetRole: stri
 
   let align = 15;
   const roleWords = targetRole.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
-  const titlesText = (structured.experience || []).map((r) => r.title?.toLowerCase() || "").join(" ");
+  const titlesText = (structured.experience || [])
+    .map((r) => r.title?.toLowerCase() || "")
+    .join(" ");
   const matches = roleWords.filter((w) => titlesText.includes(w)).length;
 
   if (roleWords.length && matches < Math.ceil(roleWords.length / 2)) {
@@ -525,16 +600,40 @@ function scoreResumeDeterministic(structured: StructuredResume, targetRole: stri
   const maxTotal = categories.reduce((s, c) => s + c.max, 0);
   const overallScore = Math.round((rawTotal / maxTotal) * 100);
   const grade =
-    overallScore >= 85 ? "A" : overallScore >= 70 ? "B" : overallScore >= 55 ? "C" : overallScore >= 40 ? "D" : "F";
+    overallScore >= 85
+      ? "A"
+      : overallScore >= 70
+        ? "B"
+        : overallScore >= 55
+          ? "C"
+          : overallScore >= 40
+            ? "D"
+            : "F";
 
   const keywordsFound = (structured.skills || []).slice(0, 8);
   const COMMON_GAPS: Record<string, string[]> = {
     "data analyst": ["SQL", "Tableau", "Power BI", "Excel", "Statistics", "DAX"],
     "data engineer": ["SQL", "dbt", "Kafka", "Spark", "Airflow", "Databricks"],
-    "software engineer": ["TypeScript", "Docker", "Kubernetes", "CI/CD", "REST API", "GraphQL"],
-    "product manager": ["Roadmapping", "A/B Testing", "SQL", "Figma", "OKRs", "Stakeholder Management"],
+    "software engineer": [
+      "TypeScript",
+      "Docker",
+      "Kubernetes",
+      "CI/CD",
+      "REST API",
+      "GraphQL",
+    ],
+    "product manager": [
+      "Roadmapping",
+      "A/B Testing",
+      "SQL",
+      "Figma",
+      "OKRs",
+      "Stakeholder Management",
+    ],
   };
-  const roleKey = Object.keys(COMMON_GAPS).find((k) => targetRole.toLowerCase().includes(k));
+  const roleKey = Object.keys(COMMON_GAPS).find((k) =>
+    targetRole.toLowerCase().includes(k)
+  );
   const allSkillsLower = (structured.skills || []).map((s) => s.toLowerCase());
   const keywordsMissing = roleKey
     ? (COMMON_GAPS[roleKey] || [])
@@ -546,16 +645,24 @@ function scoreResumeDeterministic(structured: StructuredResume, targetRole: stri
   const summary =
     overallScore >= 80
       ? `Strong ATS profile.${
-          criticalCount ? ` Fix ${criticalCount} critical issue(s) to reach tier A.` : " Focus on keyword density to maximise recruiter ranking."
+          criticalCount
+            ? ` Fix ${criticalCount} critical issue(s) to reach tier A.`
+            : " Focus on keyword density to maximise recruiter ranking."
         }`
       : overallScore >= 60
         ? `Solid foundation with gaps. ${criticalCount} critical issue(s) need fixing before applying.`
         : `Significant ATS issues detected. ${criticalCount} critical — start there before applying to roles.`;
 
-  return { overallScore, grade, categories, issues, keywordsFound, keywordsMissing, summary };
+  return {
+    overallScore,
+    grade,
+    categories,
+    issues,
+    keywordsFound,
+    keywordsMissing,
+    summary,
+  };
 }
-
-// ─── Animated counter ─────────────────────────────────────────────────────────
 
 function AnimatedNumber({ to, duration = 900 }: { to: number; duration?: number }) {
   const [val, setVal] = useState(0);
@@ -575,8 +682,6 @@ function AnimatedNumber({ to, duration = 900 }: { to: number; duration?: number 
   return <>{val}</>;
 }
 
-// ─── Score ring ───────────────────────────────────────────────────────────────
-
 function ScoreRing({ score, grade }: { score: number; grade: string }) {
   const [drawn, setDrawn] = useState(0);
   const r = 52;
@@ -589,10 +694,35 @@ function ScoreRing({ score, grade }: { score: number; grade: string }) {
   }, [score]);
 
   return (
-    <div style={{ position: "relative", width: 128, height: 128, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: ringColor, opacity: 0.08, filter: "blur(18px)" }} />
+    <div
+      style={{
+        position: "relative",
+        width: 128,
+        height: 128,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          borderRadius: "50%",
+          background: ringColor,
+          opacity: 0.08,
+          filter: "blur(18px)",
+        }}
+      />
       <svg width="128" height="128" style={{ transform: "rotate(-90deg)" }}>
-        <circle cx="64" cy="64" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="9" />
+        <circle
+          cx="64"
+          cy="64"
+          r={r}
+          fill="none"
+          stroke="rgba(255,255,255,0.06)"
+          strokeWidth="9"
+        />
         <circle
           cx="64"
           cy="64"
@@ -603,18 +733,37 @@ function ScoreRing({ score, grade }: { score: number; grade: string }) {
           strokeDasharray={circ}
           strokeDashoffset={circ - (drawn / 100) * circ}
           strokeLinecap="round"
-          style={{ transition: "stroke-dashoffset 1.3s cubic-bezier(0.34,1.4,0.64,1)" }}
+          style={{
+            transition: "stroke-dashoffset 1.3s cubic-bezier(0.34,1.4,0.64,1)",
+          }}
         />
       </svg>
-      <div style={{ position: "absolute", display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1 }}>
-        <span style={{ fontSize: 34, fontWeight: 800, color: ringColor }}>{grade}</span>
-        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontFamily: "monospace", marginTop: 3 }}>{score}/100</span>
+      <div
+        style={{
+          position: "absolute",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          lineHeight: 1,
+        }}
+      >
+        <span style={{ fontSize: 34, fontWeight: 800, color: ringColor }}>
+          {grade}
+        </span>
+        <span
+          style={{
+            fontSize: 11,
+            color: "rgba(255,255,255,0.4)",
+            fontFamily: "monospace",
+            marginTop: 3,
+          }}
+        >
+          {score}/100
+        </span>
       </div>
     </div>
   );
 }
-
-// ─── Category bar ─────────────────────────────────────────────────────────────
 
 function CatBar({ cat, delay }: { cat: ATSCategory; delay: number }) {
   const [w, setW] = useState(0);
@@ -628,13 +777,27 @@ function CatBar({ cat, delay }: { cat: ATSCategory; delay: number }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "rgba(255,255,255,0.55)" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          fontSize: 12,
+          color: "rgba(255,255,255,0.55)",
+        }}
+      >
         <span>{cat.label}</span>
         <span style={{ fontFamily: "monospace" }}>
           {cat.score}/{cat.max}
         </span>
       </div>
-      <div style={{ height: 5, borderRadius: 99, background: "rgba(255,255,255,0.07)", overflow: "hidden" }}>
+      <div
+        style={{
+          height: 5,
+          borderRadius: 99,
+          background: "rgba(255,255,255,0.07)",
+          overflow: "hidden",
+        }}
+      >
         <div
           style={{
             height: "100%",
@@ -650,8 +813,6 @@ function CatBar({ cat, delay }: { cat: ATSCategory; delay: number }) {
   );
 }
 
-// ─── Issue row ────────────────────────────────────────────────────────────────
-
 function IssueRow({ issue, delay }: { issue: ATSIssue; delay: number }) {
   const [vis, setVis] = useState(false);
   const [open, setOpen] = useState(false);
@@ -662,9 +823,24 @@ function IssueRow({ issue, delay }: { issue: ATSIssue; delay: number }) {
   }, [delay]);
 
   const SEV = {
-    critical: { dot: "#ef4444", text: "#fca5a5", bg: "rgba(239,68,68,0.08)", border: "rgba(239,68,68,0.2)" },
-    warning: { dot: "#f59e0b", text: "#fcd34d", bg: "rgba(245,158,11,0.08)", border: "rgba(245,158,11,0.2)" },
-    suggestion: { dot: LI_BLUE, text: "#93c5fd", bg: "rgba(10,102,194,0.08)", border: LI_BORDER },
+    critical: {
+      dot: "#ef4444",
+      text: "#fca5a5",
+      bg: "rgba(239,68,68,0.08)",
+      border: "rgba(239,68,68,0.2)",
+    },
+    warning: {
+      dot: "#f59e0b",
+      text: "#fcd34d",
+      bg: "rgba(245,158,11,0.08)",
+      border: "rgba(245,158,11,0.2)",
+    },
+    suggestion: {
+      dot: LI_BLUE,
+      text: "#93c5fd",
+      bg: "rgba(10,102,194,0.08)",
+      border: LI_BORDER,
+    },
   }[issue.severity];
 
   return (
@@ -681,7 +857,14 @@ function IssueRow({ issue, delay }: { issue: ATSIssue; delay: number }) {
         border: "1px solid " + (open ? SEV.border : "rgba(255,255,255,0.07)"),
       }}
     >
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 10,
+          padding: "10px 12px",
+        }}
+      >
         <div
           style={{
             width: 7,
@@ -693,21 +876,52 @@ function IssueRow({ issue, delay }: { issue: ATSIssue; delay: number }) {
             flexShrink: 0,
           }}
         />
-        <p style={{ fontSize: 12, flex: 1, lineHeight: 1.5, color: SEV.text }}>{issue.message}</p>
-        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", flexShrink: 0 }}>{open ? "▲" : "▼"}</span>
+        <p
+          style={{
+            fontSize: 12,
+            flex: 1,
+            lineHeight: 1.5,
+            color: SEV.text,
+          }}
+        >
+          {issue.message}
+        </p>
+        <span
+          style={{
+            fontSize: 10,
+            color: "rgba(255,255,255,0.2)",
+            flexShrink: 0,
+          }}
+        >
+          {open ? "▲" : "▼"}
+        </span>
       </div>
       {open && (
         <div style={{ padding: "0 12px 10px 29px" }}>
-          <p style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", lineHeight: 1.6 }}>{issue.fix}</p>
+          <p
+            style={{
+              fontSize: 11,
+              color: "rgba(255,255,255,0.5)",
+              lineHeight: 1.6,
+            }}
+          >
+            {issue.fix}
+          </p>
         </div>
       )}
     </div>
   );
 }
 
-// ─── Keyword chip ─────────────────────────────────────────────────────────────
-
-function KwChip({ word, found, delay }: { word: string; found: boolean; delay: number }) {
+function KwChip({
+  word,
+  found,
+  delay,
+}: {
+  word: string;
+  found: boolean;
+  delay: number;
+}) {
   const [vis, setVis] = useState(false);
 
   useEffect(() => {
@@ -739,8 +953,6 @@ function KwChip({ word, found, delay }: { word: string; found: boolean; delay: n
   );
 }
 
-// ─── Section card ─────────────────────────────────────────────────────────────
-
 function SectionCard({
   item,
   state,
@@ -751,7 +963,7 @@ function SectionCard({
   onCopy,
   onGenerate,
 }: {
-  item: typeof SECTION_ORDER[0];
+  item: (typeof SECTION_ORDER)[0];
   state: SectionState;
   busy: boolean;
   copiedSection: SectionKey | null;
@@ -761,24 +973,36 @@ function SectionCard({
   onGenerate: (k: SectionKey) => void;
 }) {
   const isDone = state.status === "success";
-const isLoading = state.status === "loading";
-const isError = state.status === "error";
-const hasData = state.data !== undefined && state.data !== null;
-const [collapsedByUser, setCollapsedByUser] = useState(false);
-const expanded = hasData && !collapsedByUser;
+  const isLoading = state.status === "loading";
+  const isError = state.status === "error";
+  const hasData = state.data !== undefined && state.data !== null;
+  const [collapsedByUser, setCollapsedByUser] = useState(false);
+  const expanded = hasData && !collapsedByUser;
 
   const statusColors = {
-    idle: { bg: "rgba(255,255,255,0.04)", text: "rgba(255,255,255,0.3)", border: "rgba(255,255,255,0.08)" },
-    loading: { bg: "rgba(10,102,194,0.12)", text: "#93c5fd", border: LI_BORDER },
-    success: { bg: "rgba(34,197,94,0.08)", text: "#86efac", border: "rgba(34,197,94,0.25)" },
-    error: { bg: "rgba(239,68,68,0.08)", text: "#fca5a5", border: "rgba(239,68,68,0.2)" },
+    idle: {
+      bg: "rgba(255,255,255,0.04)",
+      text: "rgba(255,255,255,0.3)",
+      border: "rgba(255,255,255,0.08)",
+    },
+    loading: {
+      bg: "rgba(10,102,194,0.12)",
+      text: "#93c5fd",
+      border: LI_BORDER,
+    },
+    success: {
+      bg: "rgba(34,197,94,0.08)",
+      text: "#86efac",
+      border: "rgba(34,197,94,0.25)",
+    },
+    error: {
+      bg: "rgba(239,68,68,0.08)",
+      text: "#fca5a5",
+      border: "rgba(239,68,68,0.2)",
+    },
   }[state.status];
 
-    const primaryLabel = isLoading
-    ? "Wait..."
-    : hasData
-      ? "Regenerate"
-      : "Generate";
+  const primaryLabel = isLoading ? "Wait..." : hasData ? "Regenerate" : "Generate";
 
   return (
     <div
@@ -789,13 +1013,34 @@ const expanded = hasData && !collapsedByUser;
         flexDirection: "column",
         height: "100%",
         background: isDone ? "rgba(10,102,194,0.07)" : "rgba(255,255,255,0.03)",
-        border: "1px solid " + (isDone ? LI_BORDER : isError ? "rgba(239,68,68,0.2)" : "rgba(255,255,255,0.08)"),
+        border:
+          "1px solid " +
+          (isDone
+            ? LI_BORDER
+            : isError
+              ? "rgba(239,68,68,0.2)"
+              : "rgba(255,255,255,0.08)"),
         transition: "border-color 0.3s, background 0.3s",
         backdropFilter: "blur(12px)",
       }}
     >
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "18px 20px 14px", gap: 12 }}>
-        <div style={{ display: "flex", gap: 12, alignItems: "flex-start", minWidth: 0 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          padding: "18px 20px 14px",
+          gap: 12,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            alignItems: "flex-start",
+            minWidth: 0,
+          }}
+        >
           <div
             style={{
               width: 34,
@@ -816,10 +1061,29 @@ const expanded = hasData && !collapsedByUser;
             {item.icon}
           </div>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "white", lineHeight: 1.2 }}>{item.title}</div>
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", marginTop: 3, lineHeight: 1.4 }}>{item.desc}</div>
+            <div
+              style={{
+                fontSize: 15,
+                fontWeight: 700,
+                color: "white",
+                lineHeight: 1.2,
+              }}
+            >
+              {item.title}
+            </div>
+            <div
+              style={{
+                fontSize: 12,
+                color: "rgba(255,255,255,0.45)",
+                marginTop: 3,
+                lineHeight: 1.4,
+              }}
+            >
+              {item.desc}
+            </div>
           </div>
         </div>
+
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
           {genAllRunning &&
             !busy &&
@@ -841,6 +1105,7 @@ const expanded = hasData && !collapsedByUser;
                 #{queuePosition}
               </div>
             )}
+
           <div
             style={{
               padding: "3px 10px",
@@ -854,9 +1119,33 @@ const expanded = hasData && !collapsedByUser;
           >
             {isLoading ? (
               <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <span style={{ width: 6, height: 6, borderRadius: "50%", background: LI_LIGHT, animation: "liDot 1.2s ease-in-out 0s infinite" }} />
-                <span style={{ width: 6, height: 6, borderRadius: "50%", background: LI_LIGHT, animation: "liDot 1.2s ease-in-out 0.2s infinite" }} />
-                <span style={{ width: 6, height: 6, borderRadius: "50%", background: LI_LIGHT, animation: "liDot 1.2s ease-in-out 0.4s infinite" }} />
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: LI_LIGHT,
+                    animation: "liDot 1.2s ease-in-out 0s infinite",
+                  }}
+                />
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: LI_LIGHT,
+                    animation: "liDot 1.2s ease-in-out 0.2s infinite",
+                  }}
+                />
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: LI_LIGHT,
+                    animation: "liDot 1.2s ease-in-out 0.4s infinite",
+                  }}
+                />
               </span>
             ) : (
               state.status
@@ -866,7 +1155,7 @@ const expanded = hasData && !collapsedByUser;
       </div>
 
       <div style={{ display: "flex", gap: 8, padding: "0 20px 16px", flexWrap: "wrap" }}>
-                <button
+        <button
           onClick={() => onGenerate(item.key)}
           disabled={isLoading}
           style={{
@@ -902,9 +1191,19 @@ const expanded = hasData && !collapsedByUser;
               fontSize: 13,
               fontWeight: 500,
               cursor: "pointer",
-              background: copiedSection === item.key ? "rgba(34,197,94,0.12)" : "rgba(255,255,255,0.05)",
-              border: "1px solid " + (copiedSection === item.key ? "rgba(34,197,94,0.3)" : "rgba(255,255,255,0.1)"),
-              color: copiedSection === item.key ? "#86efac" : "rgba(255,255,255,0.7)",
+              background:
+                copiedSection === item.key
+                  ? "rgba(34,197,94,0.12)"
+                  : "rgba(255,255,255,0.05)",
+              border:
+                "1px solid " +
+                (copiedSection === item.key
+                  ? "rgba(34,197,94,0.3)"
+                  : "rgba(255,255,255,0.1)"),
+              color:
+                copiedSection === item.key
+                  ? "#86efac"
+                  : "rgba(255,255,255,0.7)",
               transition: "all 0.2s",
             }}
           >
@@ -932,24 +1231,14 @@ const expanded = hasData && !collapsedByUser;
         )}
       </div>
 
-      {state.error && (
+      {hasData ? (
         <div
           style={{
-            margin: "0 20px 16px",
-            padding: "10px 14px",
-            borderRadius: 10,
-            fontSize: 12,
-            background: "rgba(239,68,68,0.08)",
-            border: "1px solid rgba(239,68,68,0.2)",
-            color: "#fca5a5",
+            maxHeight: expanded ? 320 : 0,
+            overflow: "hidden",
+            transition: "max-height 0.4s cubic-bezier(0.4,0,0.2,1)",
           }}
         >
-          {state.error}
-        </div>
-      )}
-
-      {hasData && (
-        <div style={{ maxHeight: expanded ? 320 : 0, overflow: "hidden", transition: "max-height 0.4s cubic-bezier(0.4,0,0.2,1)" }}>
           <pre
             style={{
               margin: "0 20px 20px",
@@ -969,14 +1258,21 @@ const expanded = hasData && !collapsedByUser;
             {formatSectionOutput(item.key, state.data)}
           </pre>
         </div>
+      ) : (
+        <div
+          style={{
+            padding: "0 20px 20px",
+            fontSize: 12,
+            color: "rgba(255,255,255,0.35)",
+            lineHeight: 1.6,
+          }}
+        >
+          Generate this section to preview the output here.
+        </div>
       )}
-
-      {!hasData && state.status === "idle" && <div style={{ height: 4 }} />}
     </div>
   );
 }
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function OptimizePage() {
   const searchParams = useSearchParams();
@@ -987,7 +1283,7 @@ export default function OptimizePage() {
 
   const [file, setFile] = useState<File | null>(null);
   const [fileErr, setFileErr] = useState<string | null>(null);
-  const [apiErr, setApiErr] = useState<string | null>(null);
+  const [highlightTargetRole, setHighlightTargetRole] = useState(false);
 
   const [ctx, setCtx] = useState<UserContext>({
     targetRole: "",
@@ -1002,7 +1298,9 @@ export default function OptimizePage() {
   const [parsedId, setParsedId] = useState<string>("");
   const [workspaceId, setWorkspaceId] = useState<string>("");
   const [structured, setStructured] = useState<StructuredResume | null>(null);
-  const [sections, setSections] = useState<Record<SectionKey, SectionState>>(makeInitialSections());
+  const [sections, setSections] = useState<Record<SectionKey, SectionState>>(
+    makeInitialSections()
+  );
   const [activeSection, setActiveSection] = useState<SectionKey | null>(null);
   const [copiedSection, setCopiedSection] = useState<SectionKey | null>(null);
 
@@ -1063,12 +1361,35 @@ export default function OptimizePage() {
     }
   }, [structured, ctx.targetRole]);
 
-  // ─── Helpers ───────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (ctx.targetRole.trim()) {
+      setHighlightTargetRole(false);
+    }
+  }, [ctx.targetRole]);
 
-    const topPreview = useMemo(() => (structured?.skills || []).slice(0, 10), [structured]);
-  const doneCount = Object.values(sections).filter((s) => s.status === "success").length;
+  const topPreview = useMemo(
+    () => (structured?.skills || []).slice(0, 10),
+    [structured]
+  );
+
+  const doneCount = Object.values(sections).filter(
+    (s) => s.status === "success"
+  ).length;
+
   const allSectionsDone = doneCount === SECTION_ORDER.length;
   const PARSE_STEPS = ["Uploading resume", "Extracting text", "Structuring profile"];
+
+  const sectionTitleMap = useMemo(
+    () =>
+      SECTION_ORDER.reduce(
+        (acc, item) => {
+          acc[item.key] = item.title;
+          return acc;
+        },
+        {} as Record<SectionKey, string>
+      ),
+    []
+  );
 
   const queuePositionMap = useMemo(() => {
     const out: Partial<Record<SectionKey, number>> = {};
@@ -1092,44 +1413,61 @@ export default function OptimizePage() {
               : "Generate All";
 
   async function markWorkspaceCleared(currentWorkspaceId: string): Promise<void> {
-  const workerBase = process.env.NEXT_PUBLIC_LINKEDUP_WORKER_URL;
-  if (!workerBase) throw new Error("Missing NEXT_PUBLIC_LINKEDUP_WORKER_URL.");
+    const workerBase = process.env.NEXT_PUBLIC_LINKEDUP_WORKER_URL;
+    if (!workerBase) throw new Error("Missing NEXT_PUBLIC_LINKEDUP_WORKER_URL.");
 
-  const res = await fetch(`${workerBase}/workspace/clear`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      workspaceId: currentWorkspaceId,
-      userId: userId || "",
-    }),
-  });
+    const res = await fetch(`${workerBase}/workspace/clear`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: currentWorkspaceId,
+        userId: userId || "",
+      }),
+    });
 
-  const json = (await res.json()) as { ok?: boolean; error?: string };
+    const json = (await res.json()) as { ok?: boolean; error?: string };
 
-  if (!res.ok || !json?.ok) {
-    throw new Error(json?.error || "Failed to mark workspace as cleared.");
+    if (!res.ok || !json?.ok) {
+      throw new Error(json?.error || "Failed to mark workspace as cleared.");
+    }
   }
-}
+
   function validateBeforeParse(): string | null {
-    if (!file) return "Please upload a PDF or DOCX resume.";
-    if (!ctx.targetRole.trim()) return "Target role is required.";
+    if (!file) {
+      const msg = "Please upload a PDF or DOCX resume.";
+      setFileErr(msg);
+      flash.error(msg, "Resume upload");
+      return msg;
+    }
+
+    if (!ctx.targetRole.trim()) {
+      setHighlightTargetRole(true);
+      flash.warning(
+        "Add a target role before parsing so the profile can be positioned correctly.",
+        "Target role required"
+      );
+      return "Target role is required.";
+    }
+
     return null;
   }
+
   function canGenerateFromCurrentState(): boolean {
     return Boolean(parsedId || getCurrentWorkspaceId());
   }
-  const getCurrentWorkspaceId = useCallback((): string => {
-  if (typeof window === "undefined") {
-    return requestedWorkspaceId || workspaceId || "";
-  }
 
-  return (
-    requestedWorkspaceId ||
-    workspaceId ||
-    localStorage.getItem("linkedup_workspace_id") ||
-    ""
-  );
-}, [requestedWorkspaceId, workspaceId]);
+  const getCurrentWorkspaceId = useCallback((): string => {
+    if (typeof window === "undefined") {
+      return requestedWorkspaceId || workspaceId || "";
+    }
+
+    return (
+      requestedWorkspaceId ||
+      workspaceId ||
+      localStorage.getItem("linkedup_workspace_id") ||
+      ""
+    );
+  }, [requestedWorkspaceId, workspaceId]);
 
   async function parseJsonOrThrow<T>(res: Response): Promise<T> {
     const json = await res.json();
@@ -1146,13 +1484,13 @@ export default function OptimizePage() {
     return json as T;
   }
 
-    function getBusyMessage(): string {
+  function getBusyMessage(): string {
     return "Wait for the current generation to complete.";
   }
 
   function tryAcquireSectionRun(section: SectionKey): boolean {
     if (generationLockRef.current) {
-      setApiErr(getBusyMessage());
+      flash.info(getBusyMessage(), "Generation in progress");
       return false;
     }
 
@@ -1162,7 +1500,7 @@ export default function OptimizePage() {
 
   function tryAcquireGenerateAllRun(): boolean {
     if (generationLockRef.current) {
-      setApiErr(getBusyMessage());
+      flash.info(getBusyMessage(), "Generation in progress");
       return false;
     }
 
@@ -1203,7 +1541,12 @@ export default function OptimizePage() {
     if (!structured) return;
 
     try {
-      await saveParsedWorkspaceToWorker(currentWorkspaceId, structured, ctx, nextSections);
+      await saveParsedWorkspaceToWorker(
+        currentWorkspaceId,
+        structured,
+        ctx,
+        nextSections
+      );
     } catch (workspaceError) {
       console.error("Failed to persist section results:", workspaceError);
     }
@@ -1230,115 +1573,116 @@ export default function OptimizePage() {
   }
 
   const getLatestWorkspaceIdForUser = useCallback(
-  async (clerkUserId: string): Promise<string> => {
-    const workerBase = process.env.NEXT_PUBLIC_LINKEDUP_WORKER_URL;
-    if (!workerBase) throw new Error("Missing NEXT_PUBLIC_LINKEDUP_WORKER_URL.");
+    async (clerkUserId: string): Promise<string> => {
+      const workerBase = process.env.NEXT_PUBLIC_LINKEDUP_WORKER_URL;
+      if (!workerBase) throw new Error("Missing NEXT_PUBLIC_LINKEDUP_WORKER_URL.");
 
-    const res = await fetch(
-      `${workerBase}/workspaces?userId=${encodeURIComponent(clerkUserId)}`,
-      {
-        method: "GET",
-        cache: "no-store",
+      const res = await fetch(
+        `${workerBase}/workspaces?userId=${encodeURIComponent(clerkUserId)}`,
+        {
+          method: "GET",
+          cache: "no-store",
+        }
+      );
+
+      const json = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        workspaces?: WorkspaceSummary[];
+      };
+
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || "Failed to load workspaces.");
       }
-    );
 
-    const json = (await res.json()) as {
-      ok?: boolean;
-      error?: string;
-      workspaces?: WorkspaceSummary[];
-    };
+      const workspaces = json.workspaces || [];
+      const latestActive = workspaces.find(
+        (workspace) => Number(workspace.is_cleared || 0) !== 1
+      );
 
-    if (!res.ok || !json?.ok) {
-      throw new Error(json?.error || "Failed to load workspaces.");
-    }
-
-    const workspaces = json.workspaces || [];
-    const latestActive = workspaces.find(
-      (workspace) => Number(workspace.is_cleared || 0) !== 1
-    );
-
-    return latestActive?.id || "";
-  },
-  []
-);
+      return latestActive?.id || "";
+    },
+    []
+  );
 
   const getWorkerWorkspace = useCallback(
-  async (
-    currentWorkspaceId: string
-  ): Promise<{
-    workspace: {
-  structured_json?: string | null;
-  ctx_json?: string | null;
-  section_results_json?: string | null;
-  is_paid?: number | boolean | null;
-  is_cleared?: number | boolean | null;
-  cleared_at?: string | null;
-};
-  }> => {
-    const workerBase = process.env.NEXT_PUBLIC_LINKEDUP_WORKER_URL;
-    if (!workerBase) throw new Error("Missing NEXT_PUBLIC_LINKEDUP_WORKER_URL.");
-
-    const res = await fetch(
-      `${workerBase}/workspace/get?id=${encodeURIComponent(currentWorkspaceId)}`,
-      {
-        method: "GET",
-        cache: "no-store",
-      }
-    );
-
-    const json = (await res.json()) as {
-      ok?: boolean;
-      error?: string;
-      workspace?: {
+    async (
+      currentWorkspaceId: string
+    ): Promise<{
+      workspace: {
         structured_json?: string | null;
         ctx_json?: string | null;
         section_results_json?: string | null;
         is_paid?: number | boolean | null;
+        is_cleared?: number | boolean | null;
+        cleared_at?: string | null;
       };
-    };
+    }> => {
+      const workerBase = process.env.NEXT_PUBLIC_LINKEDUP_WORKER_URL;
+      if (!workerBase) throw new Error("Missing NEXT_PUBLIC_LINKEDUP_WORKER_URL.");
 
-    if (!res.ok || !json?.ok || !json?.workspace) {
-      throw new Error(json?.error || "Failed to load workspace.");
-    }
+      const res = await fetch(
+        `${workerBase}/workspace/get?id=${encodeURIComponent(currentWorkspaceId)}`,
+        {
+          method: "GET",
+          cache: "no-store",
+        }
+      );
 
-    return { workspace: json.workspace };
-  },
-  []
-);
+      const json = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        workspace?: {
+          structured_json?: string | null;
+          ctx_json?: string | null;
+          section_results_json?: string | null;
+          is_paid?: number | boolean | null;
+          is_cleared?: number | boolean | null;
+        };
+      };
+
+      if (!res.ok || !json?.ok || !json?.workspace) {
+        throw new Error(json?.error || "Failed to load workspace.");
+      }
+
+      return { workspace: json.workspace };
+    },
+    []
+  );
 
   const saveParsedWorkspaceToWorker = useCallback(
-  async (
-    currentWorkspaceId: string,
-    structuredData: StructuredResume,
-    contextData: UserContext,
-    sectionResults: Record<SectionKey, SectionState>
-  ): Promise<void> => {
-    const workerBase = process.env.NEXT_PUBLIC_LINKEDUP_WORKER_URL;
-    if (!workerBase) throw new Error("Missing NEXT_PUBLIC_LINKEDUP_WORKER_URL.");
+    async (
+      currentWorkspaceId: string,
+      structuredData: StructuredResume,
+      contextData: UserContext,
+      sectionResults: Record<SectionKey, SectionState>
+    ): Promise<void> => {
+      const workerBase = process.env.NEXT_PUBLIC_LINKEDUP_WORKER_URL;
+      if (!workerBase) throw new Error("Missing NEXT_PUBLIC_LINKEDUP_WORKER_URL.");
 
-    const res = await fetch(`${workerBase}/workspace/save-parsed`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        workspaceId: currentWorkspaceId,
-        userId: userId || "",
-        structured: structuredData,
-        ctx: contextData,
-        sectionResults,
-      }),
-    });
+      const res = await fetch(`${workerBase}/workspace/save-parsed`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: currentWorkspaceId,
+          userId: userId || "",
+          structured: structuredData,
+          ctx: contextData,
+          sectionResults,
+        }),
+      });
 
-    const json = (await res.json()) as {
-      ok?: boolean;
-      error?: string;
-    };
+      const json = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+      };
 
-    if (!res.ok || !json?.ok) {
-      throw new Error(json?.error || "Failed to save parsed workspace.");
-    }
-  },
-  [userId]
-);
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || "Failed to save parsed workspace.");
+      }
+    },
+    [userId]
+  );
 
   async function createWorkerWorkspace(uploadFile: File): Promise<string> {
     const workerBase = process.env.NEXT_PUBLIC_LINKEDUP_WORKER_URL;
@@ -1365,17 +1709,16 @@ export default function OptimizePage() {
     return json.workspaceId as string;
   }
 
-  // ─── Restore workspace ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!isLoaded) return;
-  
+
     if (!isSignedIn) {
       setWorkspaceId("");
       setParsedId("");
       setStructured(null);
       setSections(makeInitialSections());
       setIsGenerateAllUnlocked(false);
-  
+
       localStorage.removeItem("linkedup_workspace_id");
       localStorage.removeItem("linkedup_parsed_id");
       localStorage.removeItem("linkedup_structured_json");
@@ -1383,9 +1726,9 @@ export default function OptimizePage() {
       localStorage.removeItem("linkedup_sections_json");
       return;
     }
-  
+
     let cancelled = false;
-  
+
     const restore = async () => {
       try {
         const storedWorkspaceId = localStorage.getItem("linkedup_workspace_id") || "";
@@ -1393,20 +1736,20 @@ export default function OptimizePage() {
           !!requestedWorkspaceId &&
           !!storedWorkspaceId &&
           requestedWorkspaceId !== storedWorkspaceId;
-  
+
         let localParsedId = "";
         let localStructured: StructuredResume | null = null;
         let localCtx: UserContext | null = null;
         let localSections = makeInitialSections();
-  
+
         if (!isWorkspaceSwitch) {
           const savedParsedId = localStorage.getItem("linkedup_parsed_id") || "";
           const savedStructuredJson = localStorage.getItem("linkedup_structured_json");
           const savedCtxJson = localStorage.getItem("linkedup_ctx_json");
           const savedSectionsJson = localStorage.getItem("linkedup_sections_json");
-  
+
           localParsedId = savedParsedId;
-  
+
           if (savedStructuredJson) {
             try {
               localStructured = JSON.parse(savedStructuredJson) as StructuredResume;
@@ -1414,7 +1757,7 @@ export default function OptimizePage() {
               localStructured = null;
             }
           }
-  
+
           if (savedCtxJson) {
             try {
               localCtx = JSON.parse(savedCtxJson) as UserContext;
@@ -1422,7 +1765,7 @@ export default function OptimizePage() {
               localCtx = null;
             }
           }
-  
+
           if (savedSectionsJson) {
             try {
               localSections = normalizeSections(
@@ -1433,74 +1776,74 @@ export default function OptimizePage() {
             }
           }
         }
-  
-        let resolvedWorkspaceId =
-  requestedWorkspaceId ||
-  storedWorkspaceId ||
-  "";
-  
+
+        let resolvedWorkspaceId = requestedWorkspaceId || storedWorkspaceId || "";
+
         if (!resolvedWorkspaceId && userId) {
           resolvedWorkspaceId = await getLatestWorkspaceIdForUser(userId);
         }
-  
+
         if (!resolvedWorkspaceId || cancelled) return;
-  
+
         setWorkspaceId(resolvedWorkspaceId);
         localStorage.setItem("linkedup_workspace_id", resolvedWorkspaceId);
-  
+
         if (localParsedId) {
           setParsedId(localParsedId);
         } else {
           setParsedId("");
         }
-  
+
         if (localStructured) {
           setStructured(localStructured);
         } else if (isWorkspaceSwitch) {
           setStructured(null);
         }
-  
+
         if (localCtx) {
           setCtx(localCtx);
         }
-  
+
         setSections(localSections);
-  
+
         const data = await getWorkerWorkspace(resolvedWorkspaceId);
         if (cancelled) return;
-  
+
         const structuredJson = data.workspace?.structured_json;
         const ctxJson = data.workspace?.ctx_json;
         const sectionResultsJson = data.workspace?.section_results_json;
         const isPaid = data.workspace?.is_paid;
         const isCleared = data.workspace?.is_cleared;
 
-if (Boolean(isCleared)) {
-  localStorage.removeItem("linkedup_workspace_id");
-  localStorage.removeItem("linkedup_parsed_id");
-  localStorage.removeItem("linkedup_structured_json");
-  localStorage.removeItem("linkedup_ctx_json");
-  localStorage.removeItem("linkedup_sections_json");
-  localStorage.removeItem("linkedup_pending_generate_all");
-  localStorage.removeItem("linkedup_pending_parsed_id");
-  localStorage.removeItem("linkedup_pending_structured_json");
-  localStorage.removeItem("linkedup_pending_ctx_json");
+        if (Boolean(isCleared)) {
+          localStorage.removeItem("linkedup_workspace_id");
+          localStorage.removeItem("linkedup_parsed_id");
+          localStorage.removeItem("linkedup_structured_json");
+          localStorage.removeItem("linkedup_ctx_json");
+          localStorage.removeItem("linkedup_sections_json");
+          localStorage.removeItem("linkedup_pending_generate_all");
+          localStorage.removeItem("linkedup_pending_parsed_id");
+          localStorage.removeItem("linkedup_pending_structured_json");
+          localStorage.removeItem("linkedup_pending_ctx_json");
 
-  setWorkspaceId("");
-  setParsedId("");
-  setStructured(null);
-  setSections(makeInitialSections());
-  setActiveSection(null);
-  setCopiedSection(null);
-  setAtsResult(null);
-  setAtsRan(false);
-  setIsGenerateAllUnlocked(false);
-  setIsPaymentLoading(false);
-  setApiErr("This workspace was cleared. Start a new optimization from the dashboard.");
+          setWorkspaceId("");
+          setParsedId("");
+          setStructured(null);
+          setSections(makeInitialSections());
+          setActiveSection(null);
+          setCopiedSection(null);
+          setAtsResult(null);
+          setAtsRan(false);
+          setIsGenerateAllUnlocked(false);
+          setIsPaymentLoading(false);
 
-  return;
-}
-  
+          flash.info(
+            "This workspace was cleared. Start a new optimization from the dashboard.",
+            "Workspace unavailable"
+          );
+          return;
+        }
+
         let effectiveStructured = localStructured;
         let effectiveCtx: UserContext =
           localCtx || {
@@ -1510,7 +1853,7 @@ if (Boolean(isCleared)) {
             mode: "Branding",
             targetJobText: "",
           };
-  
+
         if (structuredJson) {
           try {
             effectiveStructured = JSON.parse(structuredJson) as StructuredResume;
@@ -1518,7 +1861,7 @@ if (Boolean(isCleared)) {
             // keep local
           }
         }
-  
+
         if (ctxJson) {
           try {
             effectiveCtx = JSON.parse(ctxJson) as UserContext;
@@ -1526,9 +1869,9 @@ if (Boolean(isCleared)) {
             // keep local
           }
         }
-  
+
         let remoteSections: Record<SectionKey, SectionState> | null = null;
-  
+
         if (sectionResultsJson) {
           try {
             remoteSections = normalizeSections(
@@ -1538,17 +1881,17 @@ if (Boolean(isCleared)) {
             remoteSections = null;
           }
         }
-  
+
         const localSuccess = countSuccessfulSections(localSections);
         const remoteSuccess = countSuccessfulSections(remoteSections);
-  
+
         const bestSections =
           remoteSections && remoteSuccess >= localSuccess
             ? remoteSections
             : localSuccess > 0
               ? localSections
               : remoteSections || makeInitialSections();
-  
+
         if (effectiveStructured) {
           setStructured(effectiveStructured);
           localStorage.setItem(
@@ -1556,20 +1899,16 @@ if (Boolean(isCleared)) {
             JSON.stringify(effectiveStructured)
           );
         }
-  
+
         setCtx(effectiveCtx);
         localStorage.setItem("linkedup_ctx_json", JSON.stringify(effectiveCtx));
-  
+
         setSections(bestSections);
         localStorage.setItem("linkedup_sections_json", JSON.stringify(bestSections));
-  
+
         setIsGenerateAllUnlocked(Boolean(isPaid));
-  
-        if (
-          localSuccess > remoteSuccess &&
-          effectiveStructured &&
-          resolvedWorkspaceId
-        ) {
+
+        if (localSuccess > remoteSuccess && effectiveStructured && resolvedWorkspaceId) {
           try {
             await saveParsedWorkspaceToWorker(
               resolvedWorkspaceId,
@@ -1588,23 +1927,21 @@ if (Boolean(isCleared)) {
         console.error("Workspace restore failed:", restoreError);
       }
     };
-  
+
     restore();
-  
+
     return () => {
       cancelled = true;
     };
   }, [
-  isLoaded,
-  isSignedIn,
-  userId,
-  requestedWorkspaceId,
-  getLatestWorkspaceIdForUser,
-  getWorkerWorkspace,
-  saveParsedWorkspaceToWorker,
-]);
-
-  // ─── Pending generate-all intent after sign-in ─────────────────────────────
+    isLoaded,
+    isSignedIn,
+    userId,
+    requestedWorkspaceId,
+    getLatestWorkspaceIdForUser,
+    getWorkerWorkspace,
+    saveParsedWorkspaceToWorker,
+  ]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -1650,7 +1987,6 @@ if (Boolean(isCleared)) {
 
     const run = async () => {
       try {
-        setApiErr(null);
         setIsPaymentLoading(true);
 
         const paid = await startGenerateAllPayment();
@@ -1662,29 +1998,38 @@ if (Boolean(isCleared)) {
         localStorage.removeItem("linkedup_pending_ctx_json");
 
         setIsGenerateAllUnlocked(true);
+        flash.success(
+          "Generate All is now unlocked for this workspace.",
+          "Payment successful"
+        );
         await generateAll();
       } catch (error: unknown) {
-        setApiErr(error instanceof Error ? error.message : "Payment failed. Please try again.");
+        flash.error(
+          error instanceof Error ? error.message : "Payment failed. Please try again.",
+          "Payment failed"
+        );
       } finally {
         setIsPaymentLoading(false);
       }
     };
 
     run();
-  }, [isLoaded, isSignedIn, parsedId, structured, workspaceId, isPaymentLoading, isGenerateAllUnlocked, genAllRunning]);
-
-  // ─── Actions ───────────────────────────────────────────────────────────────
+  }, [
+    isLoaded,
+    isSignedIn,
+    parsedId,
+    structured,
+    workspaceId,
+    isPaymentLoading,
+    isGenerateAllUnlocked,
+    genAllRunning,
+  ]);
 
   async function parseResume() {
-    setApiErr(null);
     setFileErr(null);
 
     const v = validateBeforeParse();
-    if (v) {
-      if (!file) setFileErr(v);
-      else setApiErr(v);
-      return;
-    }
+    if (v) return;
 
     setParseLoading(true);
     setSections(makeInitialSections());
@@ -1732,20 +2077,24 @@ if (Boolean(isCleared)) {
       localStorage.setItem("linkedup_workspace_id", newWorkspaceId);
 
       try {
-  await saveParsedWorkspaceToWorker(
-    newWorkspaceId,
-    out.structured,
-    ctx,
-    makeInitialSections()
-  );
-} catch (workspaceSaveError) {
-  console.error("Initial workspace save failed:", workspaceSaveError);
-  setApiErr(
-    workspaceSaveError instanceof Error
-      ? workspaceSaveError.message
-      : "Workspace save failed."
-  );
-}
+        await saveParsedWorkspaceToWorker(
+          newWorkspaceId,
+          out.structured,
+          ctx,
+          makeInitialSections()
+        );
+      } catch (workspaceSaveError) {
+        console.error("Initial workspace save failed:", workspaceSaveError);
+        flash.warning(
+          "Resume parsed, but the first workspace sync failed. You can still continue.",
+          "Parsed with limited persistence"
+        );
+      }
+
+      flash.success(
+        "Your resume was parsed successfully and the workspace is ready.",
+        "Parsing complete"
+      );
 
       setTimeout(() => {
         resultsRef.current?.scrollIntoView({
@@ -1754,34 +2103,43 @@ if (Boolean(isCleared)) {
         });
       }, 200);
     } catch (e: unknown) {
-      setApiErr(e instanceof Error ? e.message : "Resume parsing failed.");
+      flash.error(
+        e instanceof Error ? e.message : "Resume parsing failed.",
+        "Parsing failed"
+      );
     } finally {
       setParseLoading(false);
     }
   }
 
-    async function handleCopy(key: SectionKey) {
-    await copySectionOutput(key, sections[key].data);
-    setCopiedSection(key);
+  async function handleCopy(key: SectionKey) {
+    try {
+      await copySectionOutput(key, sections[key].data);
+      setCopiedSection(key);
+      flash.success(`${sectionTitleMap[key]} copied to clipboard.`, "Copied");
+    } catch {
+      flash.error("Clipboard access failed. Try copying again.", "Copy failed");
+    }
   }
 
   async function handleGenerateSectionClick(section: SectionKey) {
     if (!isLoaded) return;
 
     if (!isSignedIn) {
+      flash.info("Sign in to generate profile sections.", "Authentication required");
       openSignIn?.();
       return;
     }
 
     if (!canGenerateFromCurrentState()) {
-      setApiErr("Workspace not ready. Please parse your resume again.");
+      flash.error("Workspace not ready. Please parse your resume again.");
       return;
     }
 
     const currentWorkspaceId = getCurrentWorkspaceId();
 
     if (!currentWorkspaceId) {
-      setApiErr("Workspace not ready. Please parse your resume again.");
+      flash.error("Workspace not ready. Please parse your resume again.");
       return;
     }
 
@@ -1794,7 +2152,6 @@ if (Boolean(isCleared)) {
     const previousSection = sectionsRef.current[section];
     const previousData = previousSection?.data;
 
-    setApiErr(null);
     setActiveSection(section);
 
     setSections((prev) => {
@@ -1829,6 +2186,7 @@ if (Boolean(isCleared)) {
       });
 
       await persistSectionResults(currentWorkspaceId, nextSections);
+      flash.success(`${sectionTitleMap[section]} is ready.`, "Section generated");
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : `Failed: ${section}`;
 
@@ -1846,7 +2204,7 @@ if (Boolean(isCleared)) {
         return next;
       });
 
-      setApiErr(msg);
+      flash.error(msg, `${sectionTitleMap[section]} failed`);
     } finally {
       setActiveSection(null);
       releaseGenerationRun();
@@ -1860,13 +2218,13 @@ if (Boolean(isCleared)) {
 
     const currentWorkspaceId = getCurrentWorkspaceId();
 
-if (!currentWorkspaceId) {
-  throw new Error("Workspace not ready. Please parse your resume again.");
-}
+    if (!currentWorkspaceId) {
+      throw new Error("Workspace not ready. Please parse your resume again.");
+    }
 
-if (!workspaceId) {
-  setWorkspaceId(currentWorkspaceId);
-}
+    if (!workspaceId) {
+      setWorkspaceId(currentWorkspaceId);
+    }
 
     const checkoutLoaded = await loadRazorpayScript();
     if (!checkoutLoaded || !window.Razorpay) {
@@ -1973,7 +2331,7 @@ if (!workspaceId) {
     });
   }
 
-    async function generateAll(forceRegenerateAll = false) {
+  async function generateAll(forceRegenerateAll = false) {
     const currentWorkspaceId = getCurrentWorkspaceId();
 
     if (!currentWorkspaceId) return;
@@ -1985,14 +2343,17 @@ if (!workspaceId) {
 
     genAllAbort.current = false;
     setGenAllRunning(true);
-    setApiErr(null);
 
     const queue = forceRegenerateAll
       ? SECTION_ORDER.map((s) => s.key)
       : SECTION_ORDER
           .filter((s) => {
             const current = sectionsRef.current[s.key];
-            return current?.status !== "success" || current?.data === undefined || current?.data === null;
+            return (
+              current?.status !== "success" ||
+              current?.data === undefined ||
+              current?.data === null
+            );
           })
           .map((s) => s.key);
 
@@ -2003,6 +2364,7 @@ if (!workspaceId) {
       setGenerateAllTotal(0);
       setActiveSection(null);
       releaseGenerationRun();
+      flash.info("All sections are already generated.");
       return;
     }
 
@@ -2070,7 +2432,7 @@ if (!workspaceId) {
             return next;
           });
 
-          setApiErr(msg);
+          flash.error(msg, `${sectionTitleMap[section]} failed`);
         }
 
         setActiveSection(null);
@@ -2078,6 +2440,10 @@ if (!workspaceId) {
         if (i < queue.length - 1 && !genAllAbort.current) {
           await new Promise((r) => setTimeout(r, 1200));
         }
+      }
+
+      if (!genAllAbort.current) {
+        flash.success("All queued sections finished generating.", "Batch complete");
       }
     } finally {
       setGenAllRunning(false);
@@ -2091,7 +2457,7 @@ if (!workspaceId) {
 
   async function handleGenerateAllClick() {
     if (genAllRunning || isPaymentLoading) {
-      setApiErr(getBusyMessage());
+      flash.info(getBusyMessage(), "Generation in progress");
       return;
     }
 
@@ -2099,19 +2465,23 @@ if (!workspaceId) {
 
     if (!isSignedIn) {
       savePendingGenerateAllIntent();
+      flash.info(
+        "Sign in first. After that, checkout will continue automatically.",
+        "Authentication required"
+      );
       openSignIn?.();
       return;
     }
 
     if (!canGenerateFromCurrentState()) {
-      setApiErr("Workspace not ready. Please parse your resume again.");
+      flash.error("Workspace not ready. Please parse your resume again.");
       return;
     }
 
     const currentWorkspaceId = getCurrentWorkspaceId();
 
     if (!currentWorkspaceId) {
-      setApiErr("Workspace not ready. Please parse your resume again.");
+      flash.error("Workspace not ready. Please parse your resume again.");
       return;
     }
 
@@ -2124,19 +2494,25 @@ if (!workspaceId) {
       return;
     }
 
-    setApiErr(null);
     setIsPaymentLoading(true);
 
     try {
       const paid = await startGenerateAllPayment();
-      if (!paid) return;
+      if (!paid) {
+        flash.info("Checkout was closed before payment completed.", "Payment cancelled");
+        return;
+      }
 
       setIsGenerateAllUnlocked(true);
+      flash.success(
+        "Generate All has been unlocked for this workspace.",
+        "Payment successful"
+      );
       await generateAll(allSectionsDone);
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : "Payment failed. Please try again.";
-      setApiErr(message);
+      flash.error(message, "Payment failed");
     } finally {
       setIsPaymentLoading(false);
     }
@@ -2147,6 +2523,7 @@ if (!workspaceId) {
     setGenAllRunning(false);
     setGenAllIndex(-1);
     setActiveSection(null);
+    flash.info("Generate All was stopped. Completed sections were kept.", "Generation stopped");
   }
 
   function refreshATS() {
@@ -2157,77 +2534,83 @@ if (!workspaceId) {
       setAtsResult(scoreResumeDeterministic(structured, ctx.targetRole));
       setAtsRan(true);
       setAtsLoading(false);
-    }, 1200);
+      flash.success("ATS score has been refreshed.", "Score updated");
+    }, 900);
   }
 
   async function handleStartOver() {
-  setClearing(true);
+    setClearing(true);
 
-  const currentWorkspaceId = getCurrentWorkspaceId();
+    const currentWorkspaceId = getCurrentWorkspaceId();
 
-  try {
-    if (currentWorkspaceId) {
-      try {
-        await markWorkspaceCleared(currentWorkspaceId);
-      } catch (e) {
-        console.error("Failed to mark workspace cleared:", e);
+    try {
+      if (currentWorkspaceId) {
+        try {
+          await markWorkspaceCleared(currentWorkspaceId);
+        } catch (e) {
+          console.error("Failed to mark workspace cleared:", e);
+        }
       }
-    }
 
-    if (parsedId) {
-      try {
-        await fetch("/api/clear-session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: parsedId }),
-        });
-      } catch {
-        // best-effort
+      if (parsedId) {
+        try {
+          await fetch("/api/clear-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: parsedId }),
+          });
+        } catch {
+          // best-effort
+        }
       }
+
+      setFile(null);
+      setFileErr(null);
+      setHighlightTargetRole(false);
+      setCtx({
+        targetRole: "",
+        industry: "",
+        seniority: "Mid",
+        mode: "Branding",
+        targetJobText: "",
+      });
+      setParsedId("");
+      setWorkspaceId("");
+      setStructured(null);
+      setSections(makeInitialSections());
+      sectionsRef.current = makeInitialSections();
+      setActiveSection(null);
+      setCopiedSection(null);
+      setAtsResult(null);
+      setAtsRan(false);
+      setActiveTab("sections");
+      setGenAllRunning(false);
+      setGenAllIndex(-1);
+      setIsGenerateAllUnlocked(false);
+      setIsPaymentLoading(false);
+      genAllAbort.current = true;
+      setShowClearConfirm(false);
+
+      localStorage.removeItem("linkedup_workspace_id");
+      localStorage.removeItem("linkedup_parsed_id");
+      localStorage.removeItem("linkedup_pending_generate_all");
+      localStorage.removeItem("linkedup_structured_json");
+      localStorage.removeItem("linkedup_ctx_json");
+      localStorage.removeItem("linkedup_sections_json");
+      localStorage.removeItem("linkedup_pending_parsed_id");
+      localStorage.removeItem("linkedup_pending_structured_json");
+      localStorage.removeItem("linkedup_pending_ctx_json");
+
+      flash.success(
+        "Workspace cleared. History is still available in dashboard.",
+        "Workspace reset"
+      );
+
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } finally {
+      setClearing(false);
     }
-
-    setFile(null);
-    setFileErr(null);
-    setApiErr("Workspace cleared. History is still available in dashboard.");
-    setCtx({
-      targetRole: "",
-      industry: "",
-      seniority: "Mid",
-      mode: "Branding",
-      targetJobText: "",
-    });
-    setParsedId("");
-    setWorkspaceId("");
-    setStructured(null);
-    setSections(makeInitialSections());
-    sectionsRef.current = makeInitialSections();
-    setActiveSection(null);
-    setCopiedSection(null);
-    setAtsResult(null);
-    setAtsRan(false);
-    setActiveTab("sections");
-    setGenAllRunning(false);
-    setGenAllIndex(-1);
-    setIsGenerateAllUnlocked(false);
-    setIsPaymentLoading(false);
-    genAllAbort.current = true;
-    setShowClearConfirm(false);
-
-    localStorage.removeItem("linkedup_workspace_id");
-    localStorage.removeItem("linkedup_parsed_id");
-    localStorage.removeItem("linkedup_pending_generate_all");
-    localStorage.removeItem("linkedup_structured_json");
-    localStorage.removeItem("linkedup_ctx_json");
-    localStorage.removeItem("linkedup_sections_json");
-    localStorage.removeItem("linkedup_pending_parsed_id");
-    localStorage.removeItem("linkedup_pending_structured_json");
-    localStorage.removeItem("linkedup_pending_ctx_json");
-
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  } finally {
-    setClearing(false);
   }
-}
 
   return (
     <>
@@ -2243,7 +2626,10 @@ if (!workspaceId) {
         ::-webkit-scrollbar-thumb { background:${LI_SUBTLE}; border-radius:4px; }
       `}</style>
 
-      <main style={{ display: "flex", flexDirection: "column", gap: 28, opacity: pageLoaded ? 1 : 0, transition: "opacity 0.5s ease" }}>
+      <main
+        className="optimize-page"
+        style={{ opacity: pageLoaded ? 1 : 0, transition: "opacity 0.5s ease" }}
+      >
         <section
           className="li-fade-up"
           style={{
@@ -2270,25 +2656,67 @@ if (!workspaceId) {
             }}
           />
 
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 24, flexWrap: "wrap", position: "relative" }}>
+          <div className="optimize-hero-head">
             <div style={{ maxWidth: 600 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 12 }}>
-                <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px #22c55e", animation: "liBreathe 2.5s ease-in-out infinite" }} />
-                <span style={{ fontSize: 11, fontWeight: 600, color: "#22c55e", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 7,
+                  marginBottom: 12,
+                }}
+              >
+                <div
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: "50%",
+                    background: "#22c55e",
+                    boxShadow: "0 0 8px #22c55e",
+                    animation: "liBreathe 2.5s ease-in-out infinite",
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#22c55e",
+                    letterSpacing: "0.1em",
+                    textTransform: "uppercase",
+                  }}
+                >
                   Optimization Workspace
                 </span>
               </div>
-              <h1 style={{ fontSize: "clamp(26px,3.5vw,38px)", fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1.1, margin: 0 }}>
+
+              <h1
+                style={{
+                  fontSize: "clamp(26px,3.5vw,38px)",
+                  fontWeight: 800,
+                  letterSpacing: "-0.03em",
+                  lineHeight: 1.1,
+                  margin: 0,
+                }}
+              >
                 Parse first. Then unlock
                 <br />
                 <span style={{ color: LI_LIGHT }}>all sections at once.</span>
               </h1>
-              <p style={{ marginTop: 12, fontSize: 14, color: "rgba(255,255,255,0.5)", lineHeight: 1.6 }}>
-                Pay once, then watch each section generate live and copy each finished output from the cards below.
+
+              <p
+                style={{
+                  marginTop: 12,
+                  fontSize: 14,
+                  color: "rgba(255,255,255,0.5)",
+                  lineHeight: 1.6,
+                }}
+              >
+                Pay once, then watch each section generate live and copy each
+                finished output from the cards below.
               </p>
             </div>
 
-            <div style={{ display: "flex", gap: 10, flexShrink: 0, alignItems: "center" }}>
+            <div className="optimize-hero-actions">
               <Link
                 href="/"
                 style={{
@@ -2337,7 +2765,9 @@ if (!workspaceId) {
                     border: "1px solid rgba(239,68,68,0.3)",
                   }}
                 >
-                  <span style={{ fontSize: 12, color: "#fca5a5" }}>Clear everything?</span>
+                  <span style={{ fontSize: 12, color: "#fca5a5" }}>
+                    Clear everything?
+                  </span>
                   <button
                     onClick={handleStartOver}
                     disabled={clearing}
@@ -2380,10 +2810,14 @@ if (!workspaceId) {
                   fontSize: 13,
                   fontWeight: 700,
                   cursor: parseLoading ? "not-allowed" : "pointer",
-                  background: parseLoading ? "rgba(255,255,255,0.08)" : "linear-gradient(135deg," + LI_BLUE + ",#0077b5)",
+                  background: parseLoading
+                    ? "rgba(255,255,255,0.08)"
+                    : "linear-gradient(135deg," + LI_BLUE + ",#0077b5)",
                   border: "none",
                   color: parseLoading ? "rgba(255,255,255,0.4)" : "white",
-                  boxShadow: parseLoading ? "none" : "0 4px 20px rgba(10,102,194,0.4)",
+                  boxShadow: parseLoading
+                    ? "none"
+                    : "0 4px 20px rgba(10,102,194,0.4)",
                   transition: "all 0.2s",
                 }}
               >
@@ -2417,24 +2851,49 @@ if (!workspaceId) {
           </div>
         </section>
 
-        {apiErr && (
-          <div style={{ padding: "12px 18px", borderRadius: 12, fontSize: 13, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: "#fca5a5" }}>
-            {apiErr}
-          </div>
-        )}
-
         {parseLoading && (
-          <div style={{ borderRadius: 20, padding: "28px 28px", background: "rgba(255,255,255,0.03)", border: "1px solid " + LI_BORDER, animation: "liFadeUp 0.4s ease both" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20 }}>
-              <div style={{ width: 20, height: 20, borderRadius: "50%", border: "2px solid transparent", borderTopColor: LI_LIGHT, animation: "liSpin 0.8s linear infinite", flexShrink: 0 }} />
-              <span style={{ fontSize: 15, fontWeight: 600, color: LI_LIGHT }}>Parsing resume...</span>
+          <div
+            style={{
+              borderRadius: 20,
+              padding: "28px 28px",
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid " + LI_BORDER,
+              animation: "liFadeUp 0.4s ease both",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 14,
+                marginBottom: 20,
+              }}
+            >
+              <div
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: "50%",
+                  border: "2px solid transparent",
+                  borderTopColor: LI_LIGHT,
+                  animation: "liSpin 0.8s linear infinite",
+                  flexShrink: 0,
+                }}
+              />
+              <span style={{ fontSize: 15, fontWeight: 600, color: LI_LIGHT }}>
+                Parsing resume...
+              </span>
             </div>
+
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {PARSE_STEPS.map((step, i) => {
                 const done = parseStep > i;
                 const active = parseStep === i;
                 return (
-                  <div key={step} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div
+                    key={step}
+                    style={{ display: "flex", alignItems: "center", gap: 10 }}
+                  >
                     <div
                       style={{
                         width: 22,
@@ -2446,15 +2905,39 @@ if (!workspaceId) {
                         justifyContent: "center",
                         fontSize: 11,
                         fontWeight: 700,
-                        background: done ? LI_BLUE : active ? LI_SUBTLE : "rgba(255,255,255,0.05)",
-                        border: "1px solid " + (done ? LI_BLUE : active ? LI_BORDER : "rgba(255,255,255,0.1)"),
-                        color: done ? "white" : active ? LI_LIGHT : "rgba(255,255,255,0.25)",
+                        background: done
+                          ? LI_BLUE
+                          : active
+                            ? LI_SUBTLE
+                            : "rgba(255,255,255,0.05)",
+                        border:
+                          "1px solid " +
+                          (done
+                            ? LI_BLUE
+                            : active
+                              ? LI_BORDER
+                              : "rgba(255,255,255,0.1)"),
+                        color: done
+                          ? "white"
+                          : active
+                            ? LI_LIGHT
+                            : "rgba(255,255,255,0.25)",
                         transition: "all 0.4s",
                       }}
                     >
                       {done ? "✓" : i + 1}
                     </div>
-                    <span style={{ fontSize: 13, color: done ? "rgba(255,255,255,0.7)" : active ? "white" : "rgba(255,255,255,0.3)", transition: "color 0.4s" }}>
+                    <span
+                      style={{
+                        fontSize: 13,
+                        color: done
+                          ? "rgba(255,255,255,0.7)"
+                          : active
+                            ? "white"
+                            : "rgba(255,255,255,0.3)",
+                        transition: "color 0.4s",
+                      }}
+                    >
                       {step}
                     </span>
                   </div>
@@ -2464,7 +2947,7 @@ if (!workspaceId) {
           </div>
         )}
 
-        <section style={{ display: "grid", gridTemplateColumns: "1.15fr .85fr", gap: 20, alignItems: "stretch" }}>
+        <section className="optimize-main-grid">
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <ResumeUpload
               onFile={(f) => {
@@ -2474,30 +2957,98 @@ if (!workspaceId) {
               fileName={file?.name}
               error={fileErr ?? undefined}
             />
-            <div style={{ borderRadius: 20, padding: "20px 22px", background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)", flexGrow: 1 }}>
-              <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 14, color: "white" }}>Workflow tips</p>
+
+            <div
+              style={{
+                borderRadius: 20,
+                padding: "20px 22px",
+                background: "rgba(255,255,255,0.025)",
+                border: "1px solid rgba(255,255,255,0.07)",
+                flexGrow: 1,
+              }}
+            >
+              <p
+                style={{
+                  fontSize: 14,
+                  fontWeight: 600,
+                  marginBottom: 14,
+                  color: "white",
+                }}
+              >
+                Workflow tips
+              </p>
+
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 {[
-                  { tip: "Parse once, then use Generate All to unlock the full LinkedIn profile pack in one run.", cat: "Flow" },
-                  { tip: "Paste a real job description to improve role alignment and keyword relevance.", cat: "Quality" },
-                  { tip: "Use Branding mode for discoverability; switch to Recruiter mode when targeting a specific role.", cat: "Mode" },
-                  { tip: "Each section card will open automatically as soon as its result is ready.", cat: "Live" },
-                  { tip: "Copy directly from each finished card into LinkedIn — formatting is optimized for pasting.", cat: "Workflow" },
-                  { tip: "When signed in, every generated result should persist to your saved workspace.", cat: "Persistence" },
-                  { tip: "Uploading a new resume creates a new workspace and keeps your earlier ones in dashboard history.", cat: "History" },
+                  {
+                    tip: "Parse once, then use Generate All to unlock the full LinkedIn profile pack in one run.",
+                    cat: "Flow",
+                  },
+                  {
+                    tip: "Paste a real job description to improve role alignment and keyword relevance.",
+                    cat: "Quality",
+                  },
+                  {
+                    tip: "Use Branding mode for discoverability; switch to Recruiter mode when targeting a specific role.",
+                    cat: "Mode",
+                  },
+                  {
+                    tip: "Each section card will open automatically as soon as its result is ready.",
+                    cat: "Live",
+                  },
+                  {
+                    tip: "Copy directly from each finished card into LinkedIn — formatting is optimized for pasting.",
+                    cat: "Workflow",
+                  },
+                  {
+                    tip: "When signed in, every generated result should persist to your saved workspace.",
+                    cat: "Persistence",
+                  },
+                  {
+                    tip: "Uploading a new resume creates a new workspace and keeps your earlier ones in dashboard history.",
+                    cat: "History",
+                  },
                 ].map(({ tip, cat }) => (
-                  <div key={cat} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                    <span style={{ flexShrink: 0, marginTop: 1, padding: "1px 7px", borderRadius: 99, fontSize: 10, fontWeight: 600, background: LI_SUBTLE, border: "1px solid " + LI_BORDER, color: LI_LIGHT, letterSpacing: "0.04em" }}>
+                  <div
+                    key={cat}
+                    style={{ display: "flex", gap: 10, alignItems: "flex-start" }}
+                  >
+                    <span
+                      style={{
+                        flexShrink: 0,
+                        marginTop: 1,
+                        padding: "1px 7px",
+                        borderRadius: 99,
+                        fontSize: 10,
+                        fontWeight: 600,
+                        background: LI_SUBTLE,
+                        border: "1px solid " + LI_BORDER,
+                        color: LI_LIGHT,
+                        letterSpacing: "0.04em",
+                      }}
+                    >
                       {cat}
                     </span>
-                    <span style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", lineHeight: 1.6 }}>{tip}</span>
+                    <span
+                      style={{
+                        fontSize: 13,
+                        color: "rgba(255,255,255,0.6)",
+                        lineHeight: 1.6,
+                      }}
+                    >
+                      {tip}
+                    </span>
                   </div>
                 ))}
               </div>
             </div>
           </div>
 
-          <OptimizationSettings value={ctx} onChange={setCtx} />
+          <OptimizationSettings
+            value={ctx}
+            onChange={setCtx}
+            highlightTargetRole={highlightTargetRole}
+          />
         </section>
 
         {structured && (
@@ -2511,39 +3062,125 @@ if (!workspaceId) {
               animation: "liFadeUp 0.5s ease both",
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, marginBottom: 18, flexWrap: "wrap" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                gap: 16,
+                marginBottom: 18,
+                flexWrap: "wrap",
+              }}
+            >
               <div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
-                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px #22c55e" }} />
-                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#22c55e" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    marginBottom: 5,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: "50%",
+                      background: "#22c55e",
+                      boxShadow: "0 0 8px #22c55e",
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: "0.1em",
+                      textTransform: "uppercase",
+                      color: "#22c55e",
+                    }}
+                  >
                     Parsed profile preview
                   </span>
                 </div>
                 <p style={{ fontSize: 13, color: "rgba(255,255,255,0.45)" }}>
-                  Resume successfully parsed. Unlock Generate All below to fill every section.
+                  Resume successfully parsed. Unlock Generate All below to fill
+                  every section.
                 </p>
               </div>
-              <div style={{ padding: "4px 14px", borderRadius: 99, fontSize: 11, fontFamily: "monospace", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.35)" }}>
+              <div
+                style={{
+                  padding: "4px 14px",
+                  borderRadius: 99,
+                  fontSize: 11,
+                  fontFamily: "monospace",
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  color: "rgba(255,255,255,0.35)",
+                }}
+              >
                 Draft ID: {parsedId || "workspace restore"}
               </div>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 18 }}>
+            <div className="optimize-preview-grid">
               {[
-                { label: "NAME", value: structured.basics?.name || "Not found", warn: !structured.basics?.name },
+                {
+                  label: "NAME",
+                  value: structured.basics?.name || "Not found",
+                  warn: !structured.basics?.name,
+                },
                 { label: "TARGET ROLE", value: ctx.targetRole || "Not set" },
-                { label: "EXPERIENCE ENTRIES", value: String(structured.experience?.length || 0) },
+                {
+                  label: "EXPERIENCE ENTRIES",
+                  value: String(structured.experience?.length || 0),
+                },
               ].map(({ label, value, warn }) => (
-                <div key={label} style={{ borderRadius: 12, padding: "14px 16px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                  <p style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.12em", color: "rgba(255,255,255,0.3)", marginBottom: 7 }}>{label}</p>
-                  <p style={{ fontSize: 17, fontWeight: 700, color: warn ? "#f87171" : "white" }}>{value}</p>
+                <div
+                  key={label}
+                  style={{
+                    borderRadius: 12,
+                    padding: "14px 16px",
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.07)",
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.12em",
+                      color: "rgba(255,255,255,0.3)",
+                      marginBottom: 7,
+                    }}
+                  >
+                    {label}
+                  </p>
+                  <p
+                    style={{
+                      fontSize: 17,
+                      fontWeight: 700,
+                      color: warn ? "#f87171" : "white",
+                    }}
+                  >
+                    {value}
+                  </p>
                 </div>
               ))}
             </div>
 
             {topPreview.length > 0 && (
               <div>
-                <p style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.35)", marginBottom: 9 }}>
+                <p
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.1em",
+                    color: "rgba(255,255,255,0.35)",
+                    marginBottom: 9,
+                  }}
+                >
                   Top parsed skills
                 </p>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
@@ -2573,7 +3210,7 @@ if (!workspaceId) {
 
         {structured && (
           <section style={{ animation: "liFadeUp 0.5s ease 0.1s both" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 }}>
+            <div className="optimize-metrics-grid">
               {[
                 {
                   label: "Sections",
@@ -2622,7 +3259,15 @@ if (!workspaceId) {
                     overflow: "hidden",
                   }}
                 >
-                  <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(255,255,255,0.35)", marginBottom: 4 }}>
+                  <p
+                    style={{
+                      fontSize: 11,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      color: "rgba(255,255,255,0.35)",
+                      marginBottom: 4,
+                    }}
+                  >
                     {s.label}
                   </p>
 
@@ -2638,7 +3283,11 @@ if (!workspaceId) {
                         userSelect: s.locked ? "none" : "auto",
                       }}
                     >
-                      {atsResult && s.label === "ATS Score" ? <AnimatedNumber to={atsResult.overallScore} /> : s.value}
+                      {atsResult && s.label === "ATS Score" ? (
+                        <AnimatedNumber to={atsResult.overallScore} />
+                      ) : (
+                        s.value
+                      )}
                     </p>
 
                     {s.locked && (
@@ -2659,12 +3308,20 @@ if (!workspaceId) {
                     )}
                   </div>
 
-                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 3 }}>{s.locked ? "unlock after payment" : s.sub}</p>
+                  <p
+                    style={{
+                      fontSize: 11,
+                      color: "rgba(255,255,255,0.3)",
+                      marginTop: 3,
+                    }}
+                  >
+                    {s.locked ? "unlock after payment" : s.sub}
+                  </p>
                 </div>
               ))}
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 16, padding: 4, borderRadius: 14, width: "fit-content", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
+            <div className="optimize-tabs-row">
               {([
                 { key: "sections", label: "Sections" },
                 { key: "ats", label: "ATS Score" },
@@ -2681,8 +3338,13 @@ if (!workspaceId) {
                     cursor: "pointer",
                     transition: "all 0.2s",
                     background: activeTab === tab.key ? LI_SUBTLE : "transparent",
-                    border: "1px solid " + (activeTab === tab.key ? LI_BORDER : "transparent"),
-                    color: activeTab === tab.key ? "#93c5fd" : "rgba(255,255,255,0.4)",
+                    border:
+                      "1px solid " +
+                      (activeTab === tab.key ? LI_BORDER : "transparent"),
+                    color:
+                      activeTab === tab.key
+                        ? "#93c5fd"
+                        : "rgba(255,255,255,0.4)",
                   }}
                 >
                   {tab.label}
@@ -2690,8 +3352,15 @@ if (!workspaceId) {
               ))}
 
               {activeTab === "sections" && structured && (
-                <div style={{ marginLeft: 8, display: "flex", alignItems: "center", gap: 8 }}>
-                                    {!genAllRunning ? (
+                <div
+                  style={{
+                    marginLeft: 8,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
+                  {!genAllRunning ? (
                     <button
                       onClick={handleGenerateAllClick}
                       disabled={isPaymentLoading}
@@ -2715,7 +3384,9 @@ if (!workspaceId) {
                         gap: 7,
                       }}
                     >
-                      <span style={{ fontSize: 15 }}>{isGenerateAllUnlocked ? "⚡" : "🔒"}</span>
+                      <span style={{ fontSize: 15 }}>
+                        {isGenerateAllUnlocked ? "⚡" : "🔒"}
+                      </span>
                       {generateAllButtonLabel}
                     </button>
                   ) : (
@@ -2755,7 +3426,16 @@ if (!workspaceId) {
                         gap: 6,
                       }}
                     >
-                      <div style={{ width: 6, height: 6, borderRadius: "50%", border: "1.5px solid transparent", borderTopColor: LI_LIGHT, animation: "liSpin 0.7s linear infinite" }} />
+                      <div
+                        style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: "50%",
+                          border: "1.5px solid transparent",
+                          borderTopColor: LI_LIGHT,
+                          animation: "liSpin 0.7s linear infinite",
+                        }}
+                      />
                       {genAllIndex + 1} / {generateAllTotal || SECTION_ORDER.length}
                     </div>
                   )}
@@ -2785,10 +3465,18 @@ if (!workspaceId) {
             </div>
 
             {activeTab === "sections" && (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 14, alignItems: "stretch" }}>
+              <div className="optimize-sections-grid">
                 {SECTION_ORDER.map((item, i) => (
-                  <div key={item.key} style={{ animation: "liFadeUp 0.4s ease " + i * 0.05 + "s both", height: "100%", display: "flex", flexDirection: "column" }}>
-                                        <SectionCard
+                  <div
+                    key={item.key}
+                    style={{
+                      animation: "liFadeUp 0.4s ease " + i * 0.05 + "s both",
+                      height: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <SectionCard
                       item={item}
                       state={sections[item.key]}
                       busy={activeSection === item.key}
@@ -2806,14 +3494,49 @@ if (!workspaceId) {
             {activeTab === "ats" && (
               <div>
                 {atsLoading && (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 0", gap: 16, textAlign: "center" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      padding: "60px 0",
+                      gap: 16,
+                      textAlign: "center",
+                    }}
+                  >
                     <div style={{ position: "relative", width: 52, height: 52 }}>
-                      <div style={{ position: "absolute", inset: 0, borderRadius: "50%", border: "2px solid " + LI_BORDER, animation: "liBreathe 1.5s ease-in-out infinite" }} />
-                      <div style={{ position: "absolute", inset: 5, borderRadius: "50%", border: "2px solid transparent", borderTopColor: LI_LIGHT, animation: "liSpin 0.85s linear infinite" }} />
+                      <div
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          borderRadius: "50%",
+                          border: "2px solid " + LI_BORDER,
+                          animation: "liBreathe 1.5s ease-in-out infinite",
+                        }}
+                      />
+                      <div
+                        style={{
+                          position: "absolute",
+                          inset: 5,
+                          borderRadius: "50%",
+                          border: "2px solid transparent",
+                          borderTopColor: LI_LIGHT,
+                          animation: "liSpin 0.85s linear infinite",
+                        }}
+                      />
                     </div>
                     <div>
-                      <p style={{ fontSize: 15, fontWeight: 600 }}>Analyzing for ATS compatibility...</p>
-                      <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 5 }}>
+                      <p style={{ fontSize: 15, fontWeight: 600 }}>
+                        Analyzing for ATS compatibility...
+                      </p>
+                      <p
+                        style={{
+                          fontSize: 12,
+                          color: "rgba(255,255,255,0.4)",
+                          marginTop: 5,
+                        }}
+                      >
                         Scanning keyword density · Checking formatting · Scoring impact language
                       </p>
                     </div>
@@ -2821,34 +3544,110 @@ if (!workspaceId) {
                 )}
 
                 {!atsLoading && !atsResult && (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 0", gap: 10, textAlign: "center" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      padding: "60px 0",
+                      gap: 10,
+                      textAlign: "center",
+                    }}
+                  >
                     <div style={{ fontSize: 42, color: "rgba(10,102,194,0.35)" }}>◎</div>
                     <p style={{ fontSize: 14, fontWeight: 600 }}>No ATS score yet</p>
-                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>Click &quot;Run ATS Score&quot; above</p>
+                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>
+                      Click &quot;Run ATS Score&quot; above
+                    </p>
                   </div>
                 )}
 
                 {!atsLoading && atsResult && (
-                  <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 16 }}>
-                    <div style={{ borderRadius: 18, padding: "24px 20px", background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", gap: 20 }}>
+                  <div className="optimize-ats-grid">
+                    <div
+                      style={{
+                        borderRadius: 18,
+                        padding: "24px 20px",
+                        background: "rgba(255,255,255,0.025)",
+                        border: "1px solid rgba(255,255,255,0.07)",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 20,
+                      }}
+                    >
                       <div style={{ display: "flex", justifyContent: "center" }}>
                         <ScoreRing score={atsResult.overallScore} grade={atsResult.grade} />
                       </div>
-                      <p style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", textAlign: "center", lineHeight: 1.5 }}>{atsResult.summary}</p>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                      <p
+                        style={{
+                          fontSize: 12,
+                          color: "rgba(255,255,255,0.45)",
+                          textAlign: "center",
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        {atsResult.summary}
+                      </p>
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 10,
+                          paddingTop: 12,
+                          borderTop: "1px solid rgba(255,255,255,0.06)",
+                        }}
+                      >
                         {atsResult.categories.map((cat, i) => (
                           <CatBar key={cat.label} cat={cat} delay={300 + i * 100} />
                         ))}
                       </div>
                     </div>
 
-                    <div style={{ borderRadius: 18, padding: "22px 20px", background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                    <div
+                      style={{
+                        borderRadius: 18,
+                        padding: "22px 20px",
+                        background: "rgba(255,255,255,0.025)",
+                        border: "1px solid rgba(255,255,255,0.07)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          marginBottom: 14,
+                        }}
+                      >
                         <p style={{ fontSize: 14, fontWeight: 700 }}>Issues &amp; Fixes</p>
-                        <div style={{ display: "flex", gap: 10, fontSize: 11, color: "rgba(255,255,255,0.35)" }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: 10,
+                            fontSize: 11,
+                            color: "rgba(255,255,255,0.35)",
+                          }}
+                        >
                           {(["critical", "warning", "suggestion"] as const).map((sev) => (
-                            <span key={sev} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                              <span style={{ width: 6, height: 6, borderRadius: "50%", background: sev === "critical" ? "#ef4444" : sev === "warning" ? "#f59e0b" : LI_BLUE, display: "inline-block" }} />
+                            <span
+                              key={sev}
+                              style={{ display: "flex", alignItems: "center", gap: 4 }}
+                            >
+                              <span
+                                style={{
+                                  width: 6,
+                                  height: 6,
+                                  borderRadius: "50%",
+                                  background:
+                                    sev === "critical"
+                                      ? "#ef4444"
+                                      : sev === "warning"
+                                        ? "#f59e0b"
+                                        : LI_BLUE,
+                                  display: "inline-block",
+                                }}
+                              />
                               {sev}
                             </span>
                           ))}
@@ -2868,27 +3667,87 @@ if (!workspaceId) {
             {activeTab === "keywords" && (
               <div>
                 {!atsResult ? (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 0", gap: 12, textAlign: "center" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      padding: "60px 0",
+                      gap: 12,
+                      textAlign: "center",
+                    }}
+                  >
                     <div style={{ fontSize: 42, color: "rgba(10,102,194,0.35)" }}>◈</div>
-                    <p style={{ fontSize: 14, fontWeight: 600 }}>Switch to ATS Score tab first</p>
-                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>Keyword analysis runs as part of the ATS scan</p>
+                    <p style={{ fontSize: 14, fontWeight: 600 }}>
+                      Switch to ATS Score tab first
+                    </p>
+                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>
+                      Keyword analysis runs as part of the ATS scan
+                    </p>
                   </div>
                 ) : (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                    <div style={{ borderRadius: 18, padding: 20, background: "rgba(10,102,194,0.06)", border: "1px solid " + LI_BORDER }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                        <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 7px #22c55e" }} />
-                        <span style={{ fontSize: 13, fontWeight: 700, color: "#4ade80" }}>Keywords Found</span>
-                        <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: "monospace", color: "rgba(255,255,255,0.3)" }}>
+                  <div className="optimize-keywords-grid">
+                    <div
+                      style={{
+                        borderRadius: 18,
+                        padding: 20,
+                        background: "rgba(10,102,194,0.06)",
+                        border: "1px solid " + LI_BORDER,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          marginBottom: 14,
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: 7,
+                            height: 7,
+                            borderRadius: "50%",
+                            background: "#22c55e",
+                            boxShadow: "0 0 7px #22c55e",
+                          }}
+                        />
+                        <span style={{ fontSize: 13, fontWeight: 700, color: "#4ade80" }}>
+                          Keywords Found
+                        </span>
+                        <span
+                          style={{
+                            marginLeft: "auto",
+                            fontSize: 11,
+                            fontFamily: "monospace",
+                            color: "rgba(255,255,255,0.3)",
+                          }}
+                        >
                           {atsResult.keywordsFound.length} matched
                         </span>
                       </div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: 8,
+                          marginBottom: 14,
+                        }}
+                      >
                         {atsResult.keywordsFound.map((kw, i) => (
                           <KwChip key={kw} word={kw} found delay={i * 60} />
                         ))}
                       </div>
-                      <p style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", lineHeight: 1.6 }}>
+
+                      <p
+                        style={{
+                          fontSize: 11,
+                          color: "rgba(255,255,255,0.35)",
+                          lineHeight: 1.6,
+                        }}
+                      >
                         These appear in your resume and match common {ctx.targetRole} requirements.
                       </p>
                     </div>
@@ -2911,24 +3770,63 @@ if (!workspaceId) {
                           userSelect: !isGenerateAllUnlocked ? "none" : "auto",
                         }}
                       >
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                          <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#ef4444", boxShadow: "0 0 7px #ef444466" }} />
-                          <span style={{ fontSize: 13, fontWeight: 700, color: "#fca5a5" }}>Keyword Gaps</span>
-                          <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: "monospace", color: "rgba(255,255,255,0.3)" }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            marginBottom: 14,
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: 7,
+                              height: 7,
+                              borderRadius: "50%",
+                              background: "#ef4444",
+                              boxShadow: "0 0 7px #ef444466",
+                            }}
+                          />
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "#fca5a5" }}>
+                            Keyword Gaps
+                          </span>
+                          <span
+                            style={{
+                              marginLeft: "auto",
+                              fontSize: 11,
+                              fontFamily: "monospace",
+                              color: "rgba(255,255,255,0.3)",
+                            }}
+                          >
                             {atsResult.keywordsMissing.length} missing
                           </span>
                         </div>
 
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: 8,
+                            marginBottom: 14,
+                          }}
+                        >
                           {atsResult.keywordsMissing.map((kw, i) => (
                             <KwChip key={kw} word={kw} found={false} delay={i * 60} />
                           ))}
                           {atsResult.keywordsMissing.length === 0 && (
-                            <span style={{ fontSize: 13, color: "#4ade80" }}>✓ No major gaps detected</span>
+                            <span style={{ fontSize: 13, color: "#4ade80" }}>
+                              ✓ No major gaps detected
+                            </span>
                           )}
                         </div>
 
-                        <p style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", lineHeight: 1.6 }}>
+                        <p
+                          style={{
+                            fontSize: 11,
+                            color: "rgba(255,255,255,0.35)",
+                            lineHeight: 1.6,
+                          }}
+                        >
                           Add these to your Skills section and work them into bullets where accurate.
                         </p>
                       </div>
@@ -2956,8 +3854,23 @@ if (!workspaceId) {
                             }}
                           >
                             <div style={{ fontSize: 18, marginBottom: 6 }}>🔒</div>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: "white" }}>Keyword gaps unlock after payment</div>
-                            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginTop: 4, lineHeight: 1.5 }}>
+                            <div
+                              style={{
+                                fontSize: 13,
+                                fontWeight: 700,
+                                color: "white",
+                              }}
+                            >
+                              Keyword gaps unlock after payment
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 11,
+                                color: "rgba(255,255,255,0.55)",
+                                marginTop: 4,
+                                lineHeight: 1.5,
+                              }}
+                            >
                               Pay through Generate All to reveal missing keywords.
                             </div>
                           </div>
@@ -2965,8 +3878,18 @@ if (!workspaceId) {
                       )}
                     </div>
 
-                    <div style={{ gridColumn: "span 2", borderRadius: 18, padding: 20, background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                      <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>All Parsed Skills</p>
+                    <div
+                      style={{
+                        gridColumn: "1 / -1",
+                        borderRadius: 18,
+                        padding: 20,
+                        background: "rgba(255,255,255,0.025)",
+                        border: "1px solid rgba(255,255,255,0.07)",
+                      }}
+                    >
+                      <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
+                        All Parsed Skills
+                      </p>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                         {(structured.skills || []).map((skill, i) => (
                           <span
@@ -2995,24 +3918,66 @@ if (!workspaceId) {
           </section>
         )}
 
-        <section style={{ borderRadius: 16, padding: "14px 20px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", display: "flex", alignItems: "flex-start", gap: 12 }}>
+        <section
+          style={{
+            borderRadius: 16,
+            padding: "14px 20px",
+            background: "rgba(245,158,11,0.06)",
+            border: "1px solid rgba(245,158,11,0.2)",
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 12,
+          }}
+        >
           <span style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>⚠</span>
           <div>
-            <p style={{ fontSize: 13, fontWeight: 600, color: "#fcd34d", marginBottom: 3 }}>
+            <p
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: "#fcd34d",
+                marginBottom: 3,
+              }}
+            >
               Disclaimer — please review all AI-generated content before use
             </p>
-            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", lineHeight: 1.6 }}>
-              This tool uses AI to suggest LinkedIn profile content based on your resume. Outputs may contain inaccuracies, embellishments, or misrepresentations.
-              Always verify facts, dates, titles, and metrics before publishing. Never claim skills or experience you do not have.
+            <p
+              style={{
+                fontSize: 12,
+                color: "rgba(255,255,255,0.45)",
+                lineHeight: 1.6,
+              }}
+            >
+              This tool uses AI to suggest LinkedIn profile content based on your
+              resume. Outputs may contain inaccuracies, embellishments, or
+              misrepresentations. Always verify facts, dates, titles, and metrics
+              before publishing. Never claim skills or experience you do not have.
               The author accepts no liability for how this content is used.
             </p>
           </div>
         </section>
 
-        <section style={{ borderRadius: 20, padding: "22px 28px", background: "rgba(10,102,194,0.06)", border: "1px solid " + LI_BORDER, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 14 }}>
+        <section className="optimize-cta-row">
           <div>
-            <p style={{ fontSize: 15, fontWeight: 700, color: "white", marginBottom: 4 }}>Need help optimizing your LinkedIn or resume?</p>
-            <p style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", lineHeight: 1.5 }}>Reach out directly and I can help you craft a standout profile.</p>
+            <p
+              style={{
+                fontSize: 15,
+                fontWeight: 700,
+                color: "white",
+                marginBottom: 4,
+              }}
+            >
+              Need help optimizing your LinkedIn or resume?
+            </p>
+            <p
+              style={{
+                fontSize: 13,
+                color: "rgba(255,255,255,0.5)",
+                lineHeight: 1.5,
+              }}
+            >
+              Reach out directly and I can help you craft a standout profile.
+            </p>
           </div>
           <a
             href="mailto:piyusha.2510@gmail.com"
@@ -3053,7 +4018,7 @@ if (!workspaceId) {
         <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 12 }}>
           © {new Date().getFullYear()} Piyusha Sayal. All rights reserved.
         </p>
-        <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
+        <div className="optimize-footer-links">
           <a
             href="https://piyushasayal.com"
             target="_blank"

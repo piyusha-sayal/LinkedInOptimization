@@ -16,7 +16,7 @@ export function ResumeUpload({
 
   const subtitle = useMemo(() => {
     if (fileName) return `Selected: ${fileName}`;
-    return "Drag and drop your resume, or click to choose a file";
+    return "Drag and drop resume, or tap to choose";
   }, [fileName]);
 
   function openPicker() {
@@ -28,18 +28,39 @@ export function ResumeUpload({
     onFile(file);
   }
 
+  const outerClass = error
+    ? "border-red-400/25 bg-red-500/[0.05] shadow-[0_18px_60px_rgba(239,68,68,0.08)]"
+    : "border-white/10 bg-white/[0.04] shadow-[0_18px_60px_rgba(0,0,0,0.18)]";
+
+  const dropClass = dragActive
+    ? "border-[color:var(--luna-200)]/55 bg-[color:var(--luna-400)]/20"
+    : error
+      ? "border-red-400/20 bg-black/30 hover:border-red-400/35"
+      : "border-white/10 bg-black/25 hover:border-[color:var(--luna-200)]/35 hover:bg-black/30";
+
   return (
-    <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="text-lg font-semibold text-white">Resume Upload</div>
-          <div className="mt-1 text-sm leading-6 text-white/68">
-            Upload PDF or DOCX. The first step parses your resume into structured profile data.
+    <div
+      className={`rounded-[28px] border p-5 backdrop-blur-2xl transition-all sm:p-6 ${outerClass}`}
+    >
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-3">
+            <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-[color:var(--luna-200)]/20 bg-[color:var(--luna-400)]/20 text-lg text-[color:var(--luna-100)]">
+              ↑
+            </div>
+            <div>
+              <div className="text-lg font-semibold text-white">
+                Resume Upload
+              </div>
+              <div className="mt-1 text-sm leading-6 text-white/68">
+                Upload PDF or DOCX. Parse your resume into structured profile data.
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/55">
-          PDF / DOCX
+        <div className="inline-flex w-fit whitespace-nowrap rounded-full border border-white/10 bg-black/25 px-3 py-1 text-xs font-medium text-white/60">
+          PDF/DOCX
         </div>
       </div>
 
@@ -68,32 +89,32 @@ export function ResumeUpload({
           setDragActive(false);
           handleFile(e.dataTransfer.files?.[0]);
         }}
-        className={[
-          "mt-5 cursor-pointer rounded-2xl border px-5 py-8 transition",
-          dragActive
-            ? "border-[color:var(--luna-200)]/50 bg-[color:var(--luna-400)]/20"
-            : "border-white/10 bg-black/25 hover:border-[color:var(--luna-200)]/35 hover:bg-black/30",
-        ].join(" ")}
+        className={`mt-5 rounded-[24px] border px-4 py-6 transition-all sm:px-5 sm:py-7 ${dropClass}`}
       >
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="text-sm font-medium text-white">{subtitle}</div>
-            <div className="mt-1 text-xs text-white/52">
-              Clean formatting improves extraction quality. Scanned PDFs may need OCR first.
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium text-white">
+              {subtitle}
             </div>
+            <div className="mt-1 text-xs leading-6 text-white/50">
+              Clean formatting improves extraction. Scanned PDFs may need OCR.
+            </div>
+
+            {fileName ? (
+              <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/[0.08] px-3 py-1 text-xs font-medium text-emerald-200">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400/15 text-[10px]">
+                  ✓
+                </span>
+                Ready to parse
+              </div>
+            ) : null}
           </div>
 
-          <div className="inline-flex rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/75">
+          <div className="inline-flex w-fit shrink-0 items-center rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-white/75 transition hover:border-white/20 hover:bg-white/10 whitespace-nowrap">
             Choose file
           </div>
         </div>
       </div>
-
-      {error ? (
-        <div className="mt-3 rounded-xl border border-[color:var(--luna-200)]/25 bg-[color:var(--luna-400)]/15 px-3 py-2 text-sm text-white">
-          {error}
-        </div>
-      ) : null}
     </div>
   );
 }
