@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth, useClerk } from "@clerk/nextjs";
@@ -136,6 +136,8 @@ type VerifyPaymentResponse = {
 
 type WorkspaceSummary = {
   id: string;
+  is_cleared?: number;
+  cleared_at?: string | null;
 };
 
 declare global {
@@ -747,6 +749,7 @@ function SectionCard({
   queuePosition,
   genAllRunning,
   onCopy,
+  onGenerate,
 }: {
   item: typeof SECTION_ORDER[0];
   state: SectionState;
@@ -755,16 +758,14 @@ function SectionCard({
   queuePosition?: number | null;
   genAllRunning?: boolean;
   onCopy: (k: SectionKey) => void;
+  onGenerate: (k: SectionKey) => void;
 }) {
   const isDone = state.status === "success";
-  const isLoading = state.status === "loading";
-  const isError = state.status === "error";
-  const hasData = state.data !== undefined && state.data !== null;
-  const [expanded, setExpanded] = useState(false);
-
-  useEffect(() => {
-    if (isDone) setExpanded(true);
-  }, [isDone]);
+const isLoading = state.status === "loading";
+const isError = state.status === "error";
+const hasData = state.data !== undefined && state.data !== null;
+const [collapsedByUser, setCollapsedByUser] = useState(false);
+const expanded = hasData && !collapsedByUser;
 
   const statusColors = {
     idle: { bg: "rgba(255,255,255,0.04)", text: "rgba(255,255,255,0.3)", border: "rgba(255,255,255,0.08)" },
@@ -773,15 +774,11 @@ function SectionCard({
     error: { bg: "rgba(239,68,68,0.08)", text: "#fca5a5", border: "rgba(239,68,68,0.2)" },
   }[state.status];
 
-  const primaryLabel = busy
-    ? "Generating..."
-    : isDone
-      ? "Generated"
-      : genAllRunning
-        ? queuePosition && queuePosition > 0
-          ? `Queued #${queuePosition}`
-          : "Queued"
-        : "Included in Generate All";
+    const primaryLabel = isLoading
+    ? "Wait..."
+    : hasData
+      ? "Regenerate"
+      : "Generate";
 
   return (
     <div
@@ -869,17 +866,26 @@ function SectionCard({
       </div>
 
       <div style={{ display: "flex", gap: 8, padding: "0 20px 16px", flexWrap: "wrap" }}>
-        <button
-          disabled
+                <button
+          onClick={() => onGenerate(item.key)}
+          disabled={isLoading}
           style={{
             padding: "8px 18px",
             borderRadius: 10,
             fontSize: 13,
             fontWeight: 600,
-            cursor: "default",
-            background: busy ? "rgba(255,255,255,0.07)" : isDone ? "rgba(10,102,194,0.15)" : "rgba(255,255,255,0.05)",
-            border: "1px solid " + (isDone ? LI_BORDER : "rgba(255,255,255,0.1)"),
-            color: busy ? "rgba(255,255,255,0.5)" : isDone ? "#93c5fd" : "rgba(255,255,255,0.45)",
+            cursor: isLoading ? "not-allowed" : "pointer",
+            background: isLoading
+              ? "rgba(255,255,255,0.07)"
+              : hasData
+                ? "rgba(10,102,194,0.15)"
+                : "rgba(255,255,255,0.05)",
+            border: "1px solid " + (hasData ? LI_BORDER : "rgba(255,255,255,0.1)"),
+            color: isLoading
+              ? "rgba(255,255,255,0.5)"
+              : hasData
+                ? "#93c5fd"
+                : "rgba(255,255,255,0.75)",
             boxShadow: "none",
             transition: "all 0.2s",
           }}
@@ -908,7 +914,7 @@ function SectionCard({
 
         {isDone && hasData && (
           <button
-            onClick={() => setExpanded((x) => !x)}
+            onClick={() => setCollapsedByUser((x) => !x)}
             style={{
               padding: "8px 14px",
               borderRadius: 10,
@@ -1013,10 +1019,15 @@ export default function OptimizePage() {
 
   const [genAllRunning, setGenAllRunning] = useState(false);
   const [genAllIndex, setGenAllIndex] = useState<number>(-1);
+  const [generateAllQueue, setGenerateAllQueue] = useState<SectionKey[]>([]);
+  const [generateAllTotal, setGenerateAllTotal] = useState(0);
 
   const resultsRef = useRef<HTMLDivElement>(null);
   const genAllAbort = useRef<boolean>(false);
   const sectionsRef = useRef<Record<SectionKey, SectionState>>(sections);
+  const generationLockRef = useRef<
+    null | { type: "section"; section: SectionKey } | { type: "all" }
+  >(null);
 
   useEffect(() => {
     sectionsRef.current = sections;
@@ -1054,10 +1065,51 @@ export default function OptimizePage() {
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
 
-  const topPreview = useMemo(() => (structured?.skills || []).slice(0, 10), [structured]);
+    const topPreview = useMemo(() => (structured?.skills || []).slice(0, 10), [structured]);
   const doneCount = Object.values(sections).filter((s) => s.status === "success").length;
+  const allSectionsDone = doneCount === SECTION_ORDER.length;
   const PARSE_STEPS = ["Uploading resume", "Extracting text", "Structuring profile"];
 
+  const queuePositionMap = useMemo(() => {
+    const out: Partial<Record<SectionKey, number>> = {};
+    generateAllQueue.forEach((key, index) => {
+      out[key] = index + 1;
+    });
+    return out;
+  }, [generateAllQueue]);
+
+  const generateAllButtonLabel =
+    !isLoaded
+      ? "Loading..."
+      : isPaymentLoading
+        ? "Opening checkout..."
+        : !isSignedIn
+          ? "Sign in to Unlock Generate All"
+          : !isGenerateAllUnlocked
+            ? "Unlock Generate All"
+            : allSectionsDone
+              ? "Regenerate All"
+              : "Generate All";
+
+  async function markWorkspaceCleared(currentWorkspaceId: string): Promise<void> {
+  const workerBase = process.env.NEXT_PUBLIC_LINKEDUP_WORKER_URL;
+  if (!workerBase) throw new Error("Missing NEXT_PUBLIC_LINKEDUP_WORKER_URL.");
+
+  const res = await fetch(`${workerBase}/workspace/clear`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      workspaceId: currentWorkspaceId,
+      userId: userId || "",
+    }),
+  });
+
+  const json = (await res.json()) as { ok?: boolean; error?: string };
+
+  if (!res.ok || !json?.ok) {
+    throw new Error(json?.error || "Failed to mark workspace as cleared.");
+  }
+}
   function validateBeforeParse(): string | null {
     if (!file) return "Please upload a PDF or DOCX resume.";
     if (!ctx.targetRole.trim()) return "Target role is required.";
@@ -1066,14 +1118,18 @@ export default function OptimizePage() {
   function canGenerateFromCurrentState(): boolean {
     return Boolean(parsedId || getCurrentWorkspaceId());
   }
-  function getCurrentWorkspaceId(): string {
-    return (
-      requestedWorkspaceId ||
-      workspaceId ||
-      localStorage.getItem("linkedup_workspace_id") ||
-      ""
-    );
+  const getCurrentWorkspaceId = useCallback((): string => {
+  if (typeof window === "undefined") {
+    return requestedWorkspaceId || workspaceId || "";
   }
+
+  return (
+    requestedWorkspaceId ||
+    workspaceId ||
+    localStorage.getItem("linkedup_workspace_id") ||
+    ""
+  );
+}, [requestedWorkspaceId, workspaceId]);
 
   async function parseJsonOrThrow<T>(res: Response): Promise<T> {
     const json = await res.json();
@@ -1088,6 +1144,69 @@ export default function OptimizePage() {
     }
 
     return json as T;
+  }
+
+    function getBusyMessage(): string {
+    return "Wait for the current generation to complete.";
+  }
+
+  function tryAcquireSectionRun(section: SectionKey): boolean {
+    if (generationLockRef.current) {
+      setApiErr(getBusyMessage());
+      return false;
+    }
+
+    generationLockRef.current = { type: "section", section };
+    return true;
+  }
+
+  function tryAcquireGenerateAllRun(): boolean {
+    if (generationLockRef.current) {
+      setApiErr(getBusyMessage());
+      return false;
+    }
+
+    generationLockRef.current = { type: "all" };
+    return true;
+  }
+
+  function releaseGenerationRun() {
+    generationLockRef.current = null;
+  }
+
+  async function optimizeOneSection(
+    section: SectionKey,
+    currentWorkspaceId: string
+  ): Promise<SectionResponse> {
+    const res = await fetch("/api/optimize-section", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        id: parsedId,
+        workspaceId: currentWorkspaceId,
+        section,
+        targetRole: ctx.targetRole,
+        industry: ctx.industry,
+        seniority: ctx.seniority,
+        mode: ctx.mode || "Branding",
+        targetJobText: ctx.targetJobText || "",
+      }),
+    });
+
+    return await parseJsonOrThrow<SectionResponse>(res);
+  }
+
+  async function persistSectionResults(
+    currentWorkspaceId: string,
+    nextSections: Record<SectionKey, SectionState>
+  ) {
+    if (!structured) return;
+
+    try {
+      await saveParsedWorkspaceToWorker(currentWorkspaceId, structured, ctx, nextSections);
+    } catch (workspaceError) {
+      console.error("Failed to persist section results:", workspaceError);
+    }
   }
 
   function savePendingGenerateAllIntent() {
@@ -1110,63 +1229,90 @@ export default function OptimizePage() {
     localStorage.setItem("linkedup_pending_ctx_json", JSON.stringify(ctx));
   }
 
-  async function getLatestWorkspaceIdForUser(clerkUserId: string): Promise<string> {
+  const getLatestWorkspaceIdForUser = useCallback(
+  async (clerkUserId: string): Promise<string> => {
     const workerBase = process.env.NEXT_PUBLIC_LINKEDUP_WORKER_URL;
     if (!workerBase) throw new Error("Missing NEXT_PUBLIC_LINKEDUP_WORKER_URL.");
 
-    const res = await fetch(`${workerBase}/workspaces?userId=${encodeURIComponent(clerkUserId)}`, {
-      method: "GET",
-      cache: "no-store",
-    });
+    const res = await fetch(
+      `${workerBase}/workspaces?userId=${encodeURIComponent(clerkUserId)}`,
+      {
+        method: "GET",
+        cache: "no-store",
+      }
+    );
 
-    const json = await res.json();
+    const json = (await res.json()) as {
+      ok?: boolean;
+      error?: string;
+      workspaces?: WorkspaceSummary[];
+    };
 
     if (!res.ok || !json?.ok) {
       throw new Error(json?.error || "Failed to load workspaces.");
     }
 
-    const workspaces = (json.workspaces || []) as WorkspaceSummary[];
-    return workspaces[0]?.id || "";
-  }
+    const workspaces = json.workspaces || [];
+    const latestActive = workspaces.find(
+      (workspace) => Number(workspace.is_cleared || 0) !== 1
+    );
 
-  async function getWorkerWorkspace(currentWorkspaceId: string): Promise<{
+    return latestActive?.id || "";
+  },
+  []
+);
+
+  const getWorkerWorkspace = useCallback(
+  async (
+    currentWorkspaceId: string
+  ): Promise<{
     workspace: {
-      structured_json?: string | null;
-      ctx_json?: string | null;
-      section_results_json?: string | null;
-      is_paid?: number | boolean | null;
-    };
-  }> {
+  structured_json?: string | null;
+  ctx_json?: string | null;
+  section_results_json?: string | null;
+  is_paid?: number | boolean | null;
+  is_cleared?: number | boolean | null;
+  cleared_at?: string | null;
+};
+  }> => {
     const workerBase = process.env.NEXT_PUBLIC_LINKEDUP_WORKER_URL;
     if (!workerBase) throw new Error("Missing NEXT_PUBLIC_LINKEDUP_WORKER_URL.");
 
-    const res = await fetch(`${workerBase}/workspace/get?id=${encodeURIComponent(currentWorkspaceId)}`, {
-      method: "GET",
-      cache: "no-store",
-    });
+    const res = await fetch(
+      `${workerBase}/workspace/get?id=${encodeURIComponent(currentWorkspaceId)}`,
+      {
+        method: "GET",
+        cache: "no-store",
+      }
+    );
 
-    const json = await res.json();
-
-    if (!res.ok || !json?.ok || !json?.workspace) {
-      throw new Error(json?.error || "Failed to load workspace.");
-    }
-
-    return json as {
-      workspace: {
+    const json = (await res.json()) as {
+      ok?: boolean;
+      error?: string;
+      workspace?: {
         structured_json?: string | null;
         ctx_json?: string | null;
         section_results_json?: string | null;
         is_paid?: number | boolean | null;
       };
     };
-  }
 
-  async function saveParsedWorkspaceToWorker(
+    if (!res.ok || !json?.ok || !json?.workspace) {
+      throw new Error(json?.error || "Failed to load workspace.");
+    }
+
+    return { workspace: json.workspace };
+  },
+  []
+);
+
+  const saveParsedWorkspaceToWorker = useCallback(
+  async (
     currentWorkspaceId: string,
     structuredData: StructuredResume,
     contextData: UserContext,
     sectionResults: Record<SectionKey, SectionState>
-  ): Promise<void> {
+  ): Promise<void> => {
     const workerBase = process.env.NEXT_PUBLIC_LINKEDUP_WORKER_URL;
     if (!workerBase) throw new Error("Missing NEXT_PUBLIC_LINKEDUP_WORKER_URL.");
 
@@ -1182,12 +1328,17 @@ export default function OptimizePage() {
       }),
     });
 
-    const json = await res.json();
+    const json = (await res.json()) as {
+      ok?: boolean;
+      error?: string;
+    };
 
     if (!res.ok || !json?.ok) {
       throw new Error(json?.error || "Failed to save parsed workspace.");
     }
-  }
+  },
+  [userId]
+);
 
   async function createWorkerWorkspace(uploadFile: File): Promise<string> {
     const workerBase = process.env.NEXT_PUBLIC_LINKEDUP_WORKER_URL;
@@ -1284,10 +1435,9 @@ export default function OptimizePage() {
         }
   
         let resolvedWorkspaceId =
-          requestedWorkspaceId ||
-          workspaceId ||
-          storedWorkspaceId ||
-          "";
+  requestedWorkspaceId ||
+  storedWorkspaceId ||
+  "";
   
         if (!resolvedWorkspaceId && userId) {
           resolvedWorkspaceId = await getLatestWorkspaceIdForUser(userId);
@@ -1323,6 +1473,33 @@ export default function OptimizePage() {
         const ctxJson = data.workspace?.ctx_json;
         const sectionResultsJson = data.workspace?.section_results_json;
         const isPaid = data.workspace?.is_paid;
+        const isCleared = data.workspace?.is_cleared;
+
+if (Boolean(isCleared)) {
+  localStorage.removeItem("linkedup_workspace_id");
+  localStorage.removeItem("linkedup_parsed_id");
+  localStorage.removeItem("linkedup_structured_json");
+  localStorage.removeItem("linkedup_ctx_json");
+  localStorage.removeItem("linkedup_sections_json");
+  localStorage.removeItem("linkedup_pending_generate_all");
+  localStorage.removeItem("linkedup_pending_parsed_id");
+  localStorage.removeItem("linkedup_pending_structured_json");
+  localStorage.removeItem("linkedup_pending_ctx_json");
+
+  setWorkspaceId("");
+  setParsedId("");
+  setStructured(null);
+  setSections(makeInitialSections());
+  setActiveSection(null);
+  setCopiedSection(null);
+  setAtsResult(null);
+  setAtsRan(false);
+  setIsGenerateAllUnlocked(false);
+  setIsPaymentLoading(false);
+  setApiErr("This workspace was cleared. Start a new optimization from the dashboard.");
+
+  return;
+}
   
         let effectiveStructured = localStructured;
         let effectiveCtx: UserContext =
@@ -1417,7 +1594,15 @@ export default function OptimizePage() {
     return () => {
       cancelled = true;
     };
-  }, [isLoaded, isSignedIn, userId, requestedWorkspaceId]);
+  }, [
+  isLoaded,
+  isSignedIn,
+  userId,
+  requestedWorkspaceId,
+  getLatestWorkspaceIdForUser,
+  getWorkerWorkspace,
+  saveParsedWorkspaceToWorker,
+]);
 
   // ─── Pending generate-all intent after sign-in ─────────────────────────────
 
@@ -1546,12 +1731,21 @@ export default function OptimizePage() {
       setWorkspaceId(newWorkspaceId);
       localStorage.setItem("linkedup_workspace_id", newWorkspaceId);
 
-      await saveParsedWorkspaceToWorker(
-        newWorkspaceId,
-        out.structured,
-        ctx,
-        makeInitialSections()
-      );
+      try {
+  await saveParsedWorkspaceToWorker(
+    newWorkspaceId,
+    out.structured,
+    ctx,
+    makeInitialSections()
+  );
+} catch (workspaceSaveError) {
+  console.error("Initial workspace save failed:", workspaceSaveError);
+  setApiErr(
+    workspaceSaveError instanceof Error
+      ? workspaceSaveError.message
+      : "Workspace save failed."
+  );
+}
 
       setTimeout(() => {
         resultsRef.current?.scrollIntoView({
@@ -1566,9 +1760,97 @@ export default function OptimizePage() {
     }
   }
 
-  async function handleCopy(key: SectionKey) {
+    async function handleCopy(key: SectionKey) {
     await copySectionOutput(key, sections[key].data);
     setCopiedSection(key);
+  }
+
+  async function handleGenerateSectionClick(section: SectionKey) {
+    if (!isLoaded) return;
+
+    if (!isSignedIn) {
+      openSignIn?.();
+      return;
+    }
+
+    if (!canGenerateFromCurrentState()) {
+      setApiErr("Workspace not ready. Please parse your resume again.");
+      return;
+    }
+
+    const currentWorkspaceId = getCurrentWorkspaceId();
+
+    if (!currentWorkspaceId) {
+      setApiErr("Workspace not ready. Please parse your resume again.");
+      return;
+    }
+
+    if (!tryAcquireSectionRun(section)) return;
+
+    if (!workspaceId) {
+      setWorkspaceId(currentWorkspaceId);
+    }
+
+    const previousSection = sectionsRef.current[section];
+    const previousData = previousSection?.data;
+
+    setApiErr(null);
+    setActiveSection(section);
+
+    setSections((prev) => {
+      const next = {
+        ...prev,
+        [section]: {
+          ...prev[section],
+          status: "loading" as const,
+          error: undefined,
+          data: prev[section]?.data,
+        },
+      };
+      sectionsRef.current = next;
+      return next;
+    });
+
+    try {
+      const out = await optimizeOneSection(section, currentWorkspaceId);
+
+      let nextSections!: Record<SectionKey, SectionState>;
+      setSections((prev) => {
+        nextSections = {
+          ...prev,
+          [section]: {
+            status: "success",
+            data: out.data,
+            error: undefined,
+          },
+        };
+        sectionsRef.current = nextSections;
+        return nextSections;
+      });
+
+      await persistSectionResults(currentWorkspaceId, nextSections);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : `Failed: ${section}`;
+
+      setSections((prev) => {
+        const next = {
+          ...prev,
+          [section]: {
+            status:
+              previousData !== undefined && previousData !== null ? "success" : "error",
+            data: previousData,
+            error: msg,
+          },
+        };
+        sectionsRef.current = next;
+        return next;
+      });
+
+      setApiErr(msg);
+    } finally {
+      setActiveSection(null);
+      releaseGenerationRun();
+    }
   }
 
   async function startGenerateAllPayment(): Promise<boolean> {
@@ -1691,103 +1973,125 @@ if (!workspaceId) {
     });
   }
 
-  async function generateAll() {
+    async function generateAll(forceRegenerateAll = false) {
     const currentWorkspaceId = getCurrentWorkspaceId();
 
-    if (!currentWorkspaceId || genAllRunning) return;
+    if (!currentWorkspaceId) return;
+    if (!tryAcquireGenerateAllRun()) return;
 
-if (!workspaceId) {
-  setWorkspaceId(currentWorkspaceId);
-}
+    if (!workspaceId) {
+      setWorkspaceId(currentWorkspaceId);
+    }
 
     genAllAbort.current = false;
     setGenAllRunning(true);
     setApiErr(null);
 
-    const queue = SECTION_ORDER.map((s) => s.key);
+    const queue = forceRegenerateAll
+      ? SECTION_ORDER.map((s) => s.key)
+      : SECTION_ORDER
+          .filter((s) => {
+            const current = sectionsRef.current[s.key];
+            return current?.status !== "success" || current?.data === undefined || current?.data === null;
+          })
+          .map((s) => s.key);
 
-    for (let i = 0; i < queue.length; i++) {
-      if (genAllAbort.current) break;
+    if (!queue.length) {
+      setGenAllRunning(false);
+      setGenAllIndex(-1);
+      setGenerateAllQueue([]);
+      setGenerateAllTotal(0);
+      setActiveSection(null);
+      releaseGenerationRun();
+      return;
+    }
 
-      const section = queue[i];
-      if (sectionsRef.current[section]?.status === "success") continue;
+    setGenerateAllQueue(queue);
+    setGenerateAllTotal(queue.length);
 
-      setGenAllIndex(i);
-      setActiveSection(section);
+    try {
+      for (let i = 0; i < queue.length; i++) {
+        if (genAllAbort.current) break;
 
-      setSections((prev) => {
-        const next = {
-          ...prev,
-          [section]: { ...prev[section], status: "loading", error: undefined },
-        };
-        sectionsRef.current = next;
-        return next;
-      });
+        const section = queue[i];
+        const previousSection = sectionsRef.current[section];
+        const previousData = previousSection?.data;
 
-      try {
-        const res = await fetch("/api/optimize-section", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({
-            id: parsedId,
-            workspaceId: currentWorkspaceId,
-            section,
-            targetRole: ctx.targetRole,
-            industry: ctx.industry,
-            seniority: ctx.seniority,
-            mode: ctx.mode || "Branding",
-            targetJobText: ctx.targetJobText || "",
-          }),
-        });
-
-        const out = await parseJsonOrThrow<SectionResponse>(res);
-
-        let nextSections!: Record<SectionKey, SectionState>;
-        setSections((prev) => {
-          nextSections = {
-            ...prev,
-            [section]: { status: "success", data: out.data },
-          };
-          sectionsRef.current = nextSections;
-          return nextSections;
-        });
-
-        if (structured && nextSections) {
-          try {
-            await saveParsedWorkspaceToWorker(currentWorkspaceId, structured, ctx, nextSections);
-          } catch (workspaceError) {
-            console.error("Failed to persist section results:", workspaceError);
-          }
-        }
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : `Failed: ${section}`;
+        setGenAllIndex(i);
+        setActiveSection(section);
+        setGenerateAllQueue(queue.slice(i + 1));
 
         setSections((prev) => {
           const next = {
             ...prev,
-            [section]: { ...prev[section], status: "error", error: msg },
+            [section]: {
+              ...prev[section],
+              status: "loading" as const,
+              error: undefined,
+              data: prev[section]?.data,
+            },
           };
           sectionsRef.current = next;
           return next;
         });
 
-        setApiErr(msg);
-      }
+        try {
+          const out = await optimizeOneSection(section, currentWorkspaceId);
 
+          let nextSections!: Record<SectionKey, SectionState>;
+          setSections((prev) => {
+            nextSections = {
+              ...prev,
+              [section]: {
+                status: "success",
+                data: out.data,
+                error: undefined,
+              },
+            };
+            sectionsRef.current = nextSections;
+            return nextSections;
+          });
+
+          await persistSectionResults(currentWorkspaceId, nextSections);
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : `Failed: ${section}`;
+
+          setSections((prev) => {
+            const next = {
+              ...prev,
+              [section]: {
+                status:
+                  previousData !== undefined && previousData !== null ? "success" : "error",
+                data: previousData,
+                error: msg,
+              },
+            };
+            sectionsRef.current = next;
+            return next;
+          });
+
+          setApiErr(msg);
+        }
+
+        setActiveSection(null);
+
+        if (i < queue.length - 1 && !genAllAbort.current) {
+          await new Promise((r) => setTimeout(r, 1200));
+        }
+      }
+    } finally {
+      setGenAllRunning(false);
+      setGenAllIndex(-1);
+      setGenerateAllQueue([]);
+      setGenerateAllTotal(0);
       setActiveSection(null);
-
-      if (i < queue.length - 1 && !genAllAbort.current) {
-        await new Promise((r) => setTimeout(r, 1200));
-      }
+      releaseGenerationRun();
     }
-
-    setGenAllRunning(false);
-    setGenAllIndex(-1);
-    setActiveSection(null);
   }
 
   async function handleGenerateAllClick() {
-    if (doneCount === SECTION_ORDER.length || genAllRunning || isPaymentLoading) {
+    if (genAllRunning || isPaymentLoading) {
+      setApiErr(getBusyMessage());
       return;
     }
 
@@ -1806,17 +2110,17 @@ if (!workspaceId) {
 
     const currentWorkspaceId = getCurrentWorkspaceId();
 
-if (!currentWorkspaceId) {
-  setApiErr("Workspace not ready. Please parse your resume again.");
-  return;
-}
+    if (!currentWorkspaceId) {
+      setApiErr("Workspace not ready. Please parse your resume again.");
+      return;
+    }
 
-if (!workspaceId) {
-  setWorkspaceId(currentWorkspaceId);
-}
+    if (!workspaceId) {
+      setWorkspaceId(currentWorkspaceId);
+    }
 
     if (isGenerateAllUnlocked) {
-      await generateAll();
+      await generateAll(allSectionsDone);
       return;
     }
 
@@ -1828,7 +2132,7 @@ if (!workspaceId) {
       if (!paid) return;
 
       setIsGenerateAllUnlocked(true);
-      await generateAll();
+      await generateAll(allSectionsDone);
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : "Payment failed. Please try again.";
@@ -1857,23 +2161,34 @@ if (!workspaceId) {
   }
 
   async function handleStartOver() {
-    setClearing(true);
+  setClearing(true);
 
-    try {
-      if (parsedId) {
+  const currentWorkspaceId = getCurrentWorkspaceId();
+
+  try {
+    if (currentWorkspaceId) {
+      try {
+        await markWorkspaceCleared(currentWorkspaceId);
+      } catch (e) {
+        console.error("Failed to mark workspace cleared:", e);
+      }
+    }
+
+    if (parsedId) {
+      try {
         await fetch("/api/clear-session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id: parsedId }),
         });
+      } catch {
+        // best-effort
       }
-    } catch {
-      // best-effort
     }
 
     setFile(null);
     setFileErr(null);
-    setApiErr(null);
+    setApiErr("Workspace cleared. History is still available in dashboard.");
     setCtx({
       targetRole: "",
       industry: "",
@@ -1885,6 +2200,7 @@ if (!workspaceId) {
     setWorkspaceId("");
     setStructured(null);
     setSections(makeInitialSections());
+    sectionsRef.current = makeInitialSections();
     setActiveSection(null);
     setCopiedSection(null);
     setAtsResult(null);
@@ -1896,7 +2212,6 @@ if (!workspaceId) {
     setIsPaymentLoading(false);
     genAllAbort.current = true;
     setShowClearConfirm(false);
-    setClearing(false);
 
     localStorage.removeItem("linkedup_workspace_id");
     localStorage.removeItem("linkedup_parsed_id");
@@ -1909,7 +2224,10 @@ if (!workspaceId) {
     localStorage.removeItem("linkedup_pending_ctx_json");
 
     window.scrollTo({ top: 0, behavior: "smooth" });
+  } finally {
+    setClearing(false);
   }
+}
 
   return (
     <>
@@ -2373,26 +2691,24 @@ if (!workspaceId) {
 
               {activeTab === "sections" && structured && (
                 <div style={{ marginLeft: 8, display: "flex", alignItems: "center", gap: 8 }}>
-                  {!genAllRunning ? (
+                                    {!genAllRunning ? (
                     <button
                       onClick={handleGenerateAllClick}
-                      disabled={doneCount === SECTION_ORDER.length || isPaymentLoading}
+                      disabled={isPaymentLoading}
                       style={{
                         padding: "8px 18px",
                         borderRadius: 10,
                         fontSize: 13,
                         fontWeight: 700,
-                        cursor: doneCount === SECTION_ORDER.length || isPaymentLoading ? "not-allowed" : "pointer",
-                        background:
-                          doneCount === SECTION_ORDER.length || isPaymentLoading
-                            ? "rgba(255,255,255,0.06)"
-                            : "linear-gradient(135deg," + LI_BLUE + ",#0077b5)",
+                        cursor: isPaymentLoading ? "not-allowed" : "pointer",
+                        background: isPaymentLoading
+                          ? "rgba(255,255,255,0.06)"
+                          : "linear-gradient(135deg," + LI_BLUE + ",#0077b5)",
                         border: "none",
-                        color: doneCount === SECTION_ORDER.length || isPaymentLoading ? "rgba(255,255,255,0.25)" : "white",
-                        boxShadow:
-                          doneCount === SECTION_ORDER.length || isPaymentLoading
-                            ? "none"
-                            : "0 3px 14px rgba(10,102,194,0.45)",
+                        color: isPaymentLoading ? "rgba(255,255,255,0.25)" : "white",
+                        boxShadow: isPaymentLoading
+                          ? "none"
+                          : "0 3px 14px rgba(10,102,194,0.45)",
                         transition: "all 0.2s",
                         display: "flex",
                         alignItems: "center",
@@ -2400,17 +2716,7 @@ if (!workspaceId) {
                       }}
                     >
                       <span style={{ fontSize: 15 }}>{isGenerateAllUnlocked ? "⚡" : "🔒"}</span>
-                      {doneCount === SECTION_ORDER.length
-                        ? "All done"
-                        : isPaymentLoading
-                          ? "Opening checkout..."
-                          : !isLoaded
-                            ? "Loading..."
-                            : !isSignedIn
-                              ? "Sign in to Unlock Generate All"
-                              : isGenerateAllUnlocked
-                                ? "Generate All"
-                                : "Unlock Generate All"}
+                      {generateAllButtonLabel}
                     </button>
                   ) : (
                     <button
@@ -2450,7 +2756,7 @@ if (!workspaceId) {
                       }}
                     >
                       <div style={{ width: 6, height: 6, borderRadius: "50%", border: "1.5px solid transparent", borderTopColor: LI_LIGHT, animation: "liSpin 0.7s linear infinite" }} />
-                      {genAllIndex + 1} / {SECTION_ORDER.length}
+                      {genAllIndex + 1} / {generateAllTotal || SECTION_ORDER.length}
                     </div>
                   )}
                 </div>
@@ -2482,18 +2788,15 @@ if (!workspaceId) {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 14, alignItems: "stretch" }}>
                 {SECTION_ORDER.map((item, i) => (
                   <div key={item.key} style={{ animation: "liFadeUp 0.4s ease " + i * 0.05 + "s both", height: "100%", display: "flex", flexDirection: "column" }}>
-                    <SectionCard
+                                        <SectionCard
                       item={item}
                       state={sections[item.key]}
                       busy={activeSection === item.key}
                       copiedSection={copiedSection}
-                      queuePosition={
-                        genAllRunning && sections[item.key]?.status !== "success"
-                          ? SECTION_ORDER.findIndex((s) => s.key === item.key) - genAllIndex
-                          : null
-                      }
+                      queuePosition={queuePositionMap[item.key] ?? null}
                       genAllRunning={genAllRunning}
                       onCopy={handleCopy}
+                      onGenerate={handleGenerateSectionClick}
                     />
                   </div>
                 ))}

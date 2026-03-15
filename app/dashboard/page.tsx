@@ -5,10 +5,15 @@ import { redirect } from "next/navigation";
 type WorkspaceItem = {
   id: string;
   resume_name?: string | null;
+  parsed_name?: string | null;
   target_role?: string | null;
   is_paid?: number | boolean | null;
+  sections_done?: number | null;
+  is_cleared?: number | boolean | null;
+  cleared_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+  last_opened_at?: string | null;
 };
 
 async function getWorkspaces(userId: string): Promise<WorkspaceItem[]> {
@@ -26,13 +31,17 @@ async function getWorkspaces(userId: string): Promise<WorkspaceItem[]> {
     }
   );
 
-  const json = await res.json();
+  const json = (await res.json()) as {
+    ok?: boolean;
+    error?: string;
+    workspaces?: WorkspaceItem[];
+  };
 
   if (!res.ok || !json?.ok) {
     throw new Error(json?.error || "Failed to load workspaces.");
   }
 
-  return (json.workspaces || []) as WorkspaceItem[];
+  return json.workspaces || [];
 }
 
 function formatDate(value?: string | null) {
@@ -60,7 +69,10 @@ export default async function DashboardPage() {
   }
 
   const total = workspaces.length;
-  const paid = workspaces.filter((w) => Boolean(w.is_paid)).length;
+  const paid = workspaces.filter(
+    (w) => Boolean(w.is_paid) && !Boolean(w.is_cleared)
+  ).length;
+  const cleared = workspaces.filter((w) => Boolean(w.is_cleared)).length;
 
   return (
     <main className="flex flex-col gap-6">
@@ -104,17 +116,17 @@ export default async function DashboardPage() {
           </div>
           <div className="mt-3 text-3xl font-bold text-white">{paid}</div>
           <div className="mt-2 text-sm text-white/45">
-            Payment-unlocked resume workspaces.
+            Payment-unlocked active workspaces.
           </div>
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
           <div className="text-xs uppercase tracking-[0.16em] text-white/35">
-            Pending Workspaces
+            Cleared Workspaces
           </div>
-          <div className="mt-3 text-3xl font-bold text-white">{total - paid}</div>
+          <div className="mt-3 text-3xl font-bold text-white">{cleared}</div>
           <div className="mt-2 text-sm text-white/45">
-            Parsed but not fully unlocked yet.
+            Preserved in history, but no longer openable.
           </div>
         </div>
       </section>
@@ -147,45 +159,69 @@ export default async function DashboardPage() {
         </section>
       ) : (
         <section className="grid gap-4">
-          {workspaces.map((workspace) => (
-            <div
-              key={workspace.id}
-              className="rounded-2xl border border-white/10 bg-white/5 p-5"
-            >
-              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <div className="text-lg font-semibold text-white">
-                    {workspace.resume_name || "Untitled Resume"}
-                  </div>
-                  <div className="mt-1 text-sm text-white/50">
-                    Target role: {workspace.target_role || "Not set"}
-                  </div>
-                  <div className="mt-2 text-xs text-white/35">
-                    Created: {formatDate(workspace.created_at)} • Updated: {formatDate(workspace.updated_at)}
-                  </div>
-                </div>
+          {workspaces.map((workspace) => {
+            const isCleared = Boolean(workspace.is_cleared);
+            const isPaid = Boolean(workspace.is_paid);
 
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-medium ${
-                      workspace.is_paid
-                        ? "border border-emerald-400/20 bg-emerald-500/10 text-emerald-300"
-                        : "border border-amber-400/20 bg-amber-500/10 text-amber-300"
-                    }`}
-                  >
-                    {workspace.is_paid ? "Paid" : "Pending"}
-                  </span>
+            return (
+              <div
+                key={workspace.id}
+                className={`rounded-2xl border p-5 ${
+                  isCleared
+                    ? "border-red-400/15 bg-red-500/5 opacity-80"
+                    : "border-white/10 bg-white/5"
+                }`}
+              >
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <div className="text-lg font-semibold text-white">
+                      {workspace.resume_name || "Untitled Resume"}
+                    </div>
 
-                  <Link
-                    href={`/optimize?workspaceId=${encodeURIComponent(workspace.id)}`}
-                    className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 transition hover:border-white/20 hover:bg-white/10 hover:text-white"
-                  >
-                    Open
-                  </Link>
+                    <div className="mt-1 text-sm text-white/50">
+                      Target role: {workspace.target_role || "Not set"}
+                    </div>
+
+                    <div className="mt-2 text-xs text-white/35">
+                      Created: {formatDate(workspace.created_at)} • Updated: {formatDate(workspace.updated_at)}
+                      {isCleared ? ` • Cleared: ${formatDate(workspace.cleared_at)}` : ""}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-medium ${
+                        isCleared
+                          ? "border border-red-400/20 bg-red-500/10 text-red-300"
+                          : isPaid
+                            ? "border border-emerald-400/20 bg-emerald-500/10 text-emerald-300"
+                            : "border border-amber-400/20 bg-amber-500/10 text-amber-300"
+                      }`}
+                    >
+                      {isCleared ? "Cleared" : isPaid ? "Paid" : "Pending"}
+                    </span>
+
+                    {isCleared ? (
+                      <span
+                        aria-disabled="true"
+                        className="cursor-not-allowed rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/35"
+                        title="Cleared workspaces cannot be opened."
+                      >
+                        Unavailable
+                      </span>
+                    ) : (
+                      <Link
+                        href={`/optimize?workspaceId=${encodeURIComponent(workspace.id)}`}
+                        className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 transition hover:border-white/20 hover:bg-white/10 hover:text-white"
+                      >
+                        Open
+                      </Link>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </section>
       )}
     </main>
