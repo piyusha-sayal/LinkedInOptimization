@@ -1,6 +1,16 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+
+export const metadata: Metadata = {
+  title: "Dashboard",
+  description: "View your saved LinkedUp workspaces and resume optimization history.",
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 type WorkspaceItem = {
   id: string;
@@ -183,8 +193,11 @@ export default async function DashboardPage() {
                     </div>
 
                     <div className="mt-2 text-xs text-white/35">
-                      Created: {formatDate(workspace.created_at)} • Updated: {formatDate(workspace.updated_at)}
-                      {isCleared ? ` • Cleared: ${formatDate(workspace.cleared_at)}` : ""}
+                      Created: {formatDate(workspace.created_at)} • Updated:{" "}
+                      {formatDate(workspace.updated_at)}
+                      {isCleared
+                        ? ` • Cleared: ${formatDate(workspace.cleared_at)}`
+                        : ""}
                     </div>
                   </div>
 

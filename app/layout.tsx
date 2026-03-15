@@ -6,14 +6,78 @@ import { auth } from "@clerk/nextjs/server";
 import InactivitySignOut from "@/components/InactivitySignOut";
 import HeaderSignOut from "@/components/HeaderSignOut";
 import FlashToastProvider from "@/components/FlashToastProvider";
+import StructuredData from "@/components/seo/StructuredData";
+
+const SITE_URL = "https://linked-in-optimization-hazel.vercel.app";
 
 export const metadata: Metadata = {
-  title: "LinkedUp — AI LinkedIn Optimizer",
+  metadataBase: new URL(SITE_URL),
+  applicationName: "LinkedUp",
+  title: {
+    default: "LinkedUp - AI LinkedIn Optimizer",
+    template: "%s | LinkedUp",
+  },
   description:
-    "Turn a resume into a stronger LinkedIn profile with structured parsing, section optimization, keyword analysis, and scoring.",
+    "Turn your resume into a stronger LinkedIn profile with AI-powered resume parsing, LinkedIn headline generation, About section writing, keyword analysis, and ATS-style scoring.",
+  keywords: [
+    "AI LinkedIn optimizer",
+    "LinkedIn profile optimizer",
+    "resume to LinkedIn profile",
+    "LinkedIn headline generator",
+    "LinkedIn about section generator",
+    "resume keyword analysis",
+    "ATS score LinkedIn",
+    "resume parser",
+    "career branding tool",
+    "LinkedIn keyword optimization",
+  ],
+  alternates: {
+    canonical: "/",
+  },
+  manifest: "/manifest.webmanifest",
   icons: {
     icon: "/favicon.svg",
+    shortcut: "/favicon.svg",
+    apple: "/apple-icon",
   },
+  openGraph: {
+    type: "website",
+    url: SITE_URL,
+    siteName: "LinkedUp",
+    title: "LinkedUp - AI LinkedIn Optimizer",
+    description:
+      "Turn your resume into a stronger LinkedIn profile with AI-powered resume parsing, headline generation, keyword intelligence, and ATS-style scoring.",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "LinkedUp - AI LinkedIn Optimizer",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "LinkedUp - AI LinkedIn Optimizer",
+    description:
+      "Turn your resume into a stronger LinkedIn profile with AI-powered resume parsing, headline generation, keyword intelligence, and ATS-style scoring.",
+    images: ["/twitter-image"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
+  authors: [{ name: "Piyusha Sayal", url: "https://piyushasayal.com" }],
+  creator: "Piyusha Sayal",
+  publisher: "Piyusha Sayal",
+  category: "career",
 };
 
 const nav = [
@@ -31,10 +95,8 @@ export default async function RootLayout({
   return (
     <ClerkProvider>
       <html lang="en">
-        <head>
-          <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-        </head>
-        <body className="min-h-screen text-white">
+        <body className="min-h-screen text-white antialiased">
+          <StructuredData />
           <InactivitySignOut />
           <FlashToastProvider />
 

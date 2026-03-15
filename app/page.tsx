@@ -1,21 +1,51 @@
 import Link from "next/link";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "AI LinkedIn Optimizer for Resume-to-Profile Conversion",
+  description:
+    "Convert your resume into a stronger LinkedIn headline, About section, keyword strategy, ATS-style score, and profile positioning with LinkedUp.",
+  keywords: [
+    "AI LinkedIn optimizer",
+    "resume to LinkedIn profile",
+    "LinkedIn headline generator",
+    "LinkedIn about section writer",
+    "resume keyword optimization",
+    "ATS style LinkedIn score",
+    "career branding app",
+  ],
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    url: "/",
+    title: "AI LinkedIn Optimizer for Resume-to-Profile Conversion",
+    description:
+      "Convert your resume into a stronger LinkedIn headline, About section, keyword strategy, ATS-style score, and profile positioning with LinkedUp.",
+  },
+  twitter: {
+    title: "AI LinkedIn Optimizer for Resume-to-Profile Conversion",
+    description:
+      "Convert your resume into a stronger LinkedIn headline, About section, keyword strategy, ATS-style score, and profile positioning with LinkedUp.",
+  },
+};
 
 const FEATURES = [
   {
-    title: "Resume → Structured Profile",
-    desc: "Upload a PDF or DOCX and turn it into a normalized profile foundation before generating any LinkedIn content.",
+    title: "Resume to Structured LinkedIn Profile",
+    desc: "Upload a PDF or DOCX resume and turn it into a normalized profile foundation before generating LinkedIn content.",
   },
   {
-    title: "Section-by-Section Optimization",
+    title: "Section-by-Section LinkedIn Optimization",
     desc: "Optimize headline, about, experience, skills, projects, and positioning without forcing one heavy all-at-once generation flow.",
   },
   {
-    title: "Keyword + Positioning Intelligence",
-    desc: "Identify matched, missing, and weak keywords so the profile becomes stronger for search and recruiter scans.",
+    title: "Keyword and Positioning Intelligence",
+    desc: "Identify matched, missing, and weak keywords so the profile becomes stronger for recruiter search and LinkedIn discoverability.",
   },
   {
-    title: "Scoring + Direction",
-    desc: "Get section-level quality feedback and a clear sense of what to improve next.",
+    title: "ATS-Style Scoring and Direction",
+    desc: "Get section-level quality feedback and a clear sense of what to improve next before updating your LinkedIn profile.",
   },
 ];
 
@@ -61,41 +91,42 @@ export default function LandingPage() {
               </div>
 
               <h1 className="mt-6 max-w-4xl text-4xl font-semibold leading-tight tracking-tight md:text-6xl">
-                Build a sharper LinkedIn profile without sending one giant prompt every time.
+                Build a sharper LinkedIn profile from your resume with AI.
               </h1>
 
               <p className="mt-5 max-w-2xl text-base leading-7 text-white/72 md:text-lg">
-                This workflow is designed to parse once, optimize deliberately, and improve each
-                section with less rate-limit risk and better control.
+                LinkedUp helps you parse once, optimize deliberately, and improve
+                your LinkedIn headline, About section, keywords, and profile
+                positioning with less rate-limit risk and better control.
               </p>
 
-              <div className="mt-8 flex flex-wrap gap-3">
+              <div className="mt-8 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
                 <Link
                   href="/optimize"
-                  className="rounded-xl bg-[color:var(--luna-200)] px-5 py-3 font-semibold text-[#001018] transition hover:bg-[color:var(--luna-100)]"
+                  className="inline-flex w-full items-center justify-center rounded-xl bg-[color:var(--luna-200)] px-4 py-3 text-center font-semibold text-[#001018] transition hover:bg-[color:var(--luna-100)] sm:w-auto sm:px-5"
                 >
                   Start optimizing
                 </Link>
 
                 <a
                   href="#how-it-works"
-                  className="rounded-xl border border-white/10 bg-black/30 px-5 py-3 text-white/80 transition hover:border-white/20 hover:text-white"
+                  className="inline-flex w-full items-center justify-center rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-center text-white/80 transition hover:border-white/20 hover:text-white sm:w-auto sm:px-5"
                 >
                   See how it works
                 </a>
               </div>
 
-              <div className="mt-8 flex flex-wrap gap-3 text-sm text-white/58">
-                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
+              <div className="mt-8 grid grid-cols-2 gap-3 text-sm text-white/58 sm:flex sm:flex-wrap">
+                <span className="inline-flex w-full items-center justify-center rounded-full border border-white/10 bg-white/5 px-3 py-2 text-center">
                   Structured parsing
                 </span>
-                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
+                <span className="inline-flex w-full items-center justify-center rounded-full border border-white/10 bg-white/5 px-3 py-2 text-center">
                   Section generation
                 </span>
-                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
+                <span className="inline-flex w-full items-center justify-center rounded-full border border-white/10 bg-white/5 px-3 py-2 text-center">
                   Keyword intelligence
                 </span>
-                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
+                <span className="inline-flex w-full items-center justify-center rounded-full border border-white/10 bg-white/5 px-3 py-2 text-center">
                   Scored output
                 </span>
               </div>
@@ -103,18 +134,24 @@ export default function LandingPage() {
 
             <div className="grid gap-4">
               <div className="rounded-2xl border border-white/10 bg-black/25 p-5">
-                <div className="text-sm font-medium text-white/60">Who is this for?</div>
+                <div className="text-sm font-medium text-white/60">
+                  Who is this for?
+                </div>
                 <div className="mt-3 text-sm leading-7 text-white/78">
-                  Job seekers, career changers, and anyone who wants their LinkedIn profile to work
-                  harder — without spending hours rewriting it from scratch.
+                  Job seekers, career changers, and professionals who want a
+                  stronger LinkedIn profile without spending hours rewriting it
+                  from scratch.
                 </div>
               </div>
 
               <div className="rounded-2xl border border-[color:var(--luna-200)]/20 bg-[color:var(--luna-400)]/20 p-5">
-                <div className="text-sm font-medium text-white/60">What you get</div>
+                <div className="text-sm font-medium text-white/60">
+                  What you get
+                </div>
                 <div className="mt-3 text-sm leading-7 text-white/78">
-                  A keyword-optimized headline, a compelling About section, stronger experience
-                  bullets, and a clear positioning strategy — all tailored to your target role.
+                  A keyword-optimized LinkedIn headline, a compelling About
+                  section, stronger experience bullets, and a clear positioning
+                  strategy tailored to your target role.
                 </div>
               </div>
             </div>
@@ -145,8 +182,8 @@ export default function LandingPage() {
               Clear flow first. Optimization second.
             </h2>
             <p className="mt-4 text-white/68">
-              This split gives the product a much cleaner first impression and makes the actual
-              optimization workspace feel more focused.
+              This split gives the product a cleaner first impression and makes
+              the optimization workspace feel more focused.
             </p>
           </div>
 
@@ -171,7 +208,7 @@ export default function LandingPage() {
             Ready to move into the optimization workspace?
           </h3>
           <p className="mx-auto mt-4 max-w-2xl text-white/68">
-            Use the dedicated page for upload, context, generation, and results.
+            Use the dedicated page for upload, context, generation, scoring, and results.
           </p>
           <div className="mt-6">
             <Link
@@ -183,45 +220,43 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* ── Disclaimer ── */}
-        <section className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.04] p-5 flex items-start gap-4">
-          <span className="text-lg shrink-0 mt-0.5">⚠</span>
+        <section className="flex items-start gap-4 rounded-2xl border border-amber-400/20 bg-amber-400/[0.04] p-5">
+          <span className="mt-0.5 shrink-0 text-lg">⚠</span>
           <div>
-            <p className="text-sm font-semibold text-amber-300 mb-1">
+            <p className="mb-1 text-sm font-semibold text-amber-300">
               Disclaimer — please review all AI-generated content before use
             </p>
             <p className="text-sm leading-7 text-white/45">
-              This tool uses AI to suggest LinkedIn profile content based on your resume. Outputs may
-              contain inaccuracies, embellishments, or misrepresentations. Always verify facts, dates,
-              job titles, and metrics before publishing. Never claim skills or experience you do not
-              have. The author accepts no liability for how this content is used.
+              This tool uses AI to suggest LinkedIn profile content based on your
+              resume. Outputs may contain inaccuracies, embellishments, or
+              misrepresentations. Always verify facts, dates, job titles, and
+              metrics before publishing. Never claim skills or experience you do
+              not have. The author accepts no liability for how this content is used.
             </p>
           </div>
         </section>
 
-        {/* ── Contact CTA ── */}
-        <section className="rounded-3xl border border-[color:var(--luna-200)]/30 bg-[color:var(--luna-400)]/10 p-8 flex flex-wrap items-center justify-between gap-5">
+        <section className="flex flex-wrap items-center justify-between gap-5 rounded-3xl border border-[color:var(--luna-200)]/30 bg-[color:var(--luna-400)]/10 p-8">
           <div>
             <h3 className="text-xl font-semibold tracking-tight">
               Need help optimizing your LinkedIn or resume?
             </h3>
-            <p className="mt-2 text-sm text-white/55 leading-7">
+            <p className="mt-2 text-sm leading-7 text-white/55">
               Reach out directly and I can help you craft a standout profile.
             </p>
           </div>
           <a
             href="mailto:piyusha.2510@gmail.com"
-            className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-[color:var(--luna-200)] px-5 py-3 font-semibold text-[#001018] transition hover:bg-[color:var(--luna-100)]"
+            className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-[color:var(--luna-200)] px-5 py-3 font-semibold text-[#001018] transition hover:bg-[color:var(--luna-100)]"
           >
             <span>✉</span> Email me
           </a>
         </section>
       </main>
 
-      {/* ── Footer ── */}
-      <footer className="mt-12 border-t border-white/[0.07] py-6 flex flex-wrap items-center justify-between gap-4 text-sm text-white/30">
+      <footer className="mt-12 flex flex-wrap items-center justify-between gap-4 border-t border-white/[0.07] py-6 text-sm text-white/30">
         <p>© {new Date().getFullYear()} Piyusha Sayal. All rights reserved.</p>
-        <div className="flex items-center gap-6">
+        <div className="flex flex-wrap items-center gap-6">
           <a
             href="https://piyushasayal.com"
             target="_blank"
