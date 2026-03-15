@@ -116,20 +116,20 @@ export default function LandingPage() {
                 </a>
               </div>
 
-              <div className="mt-8 grid grid-cols-2 gap-3 text-sm text-white/58 sm:flex sm:flex-wrap">
-                <span className="inline-flex w-full items-center justify-center rounded-full border border-white/10 bg-white/5 px-3 py-2 text-center">
-                  Structured parsing
-                </span>
-                <span className="inline-flex w-full items-center justify-center rounded-full border border-white/10 bg-white/5 px-3 py-2 text-center">
-                  Section generation
-                </span>
-                <span className="inline-flex w-full items-center justify-center rounded-full border border-white/10 bg-white/5 px-3 py-2 text-center">
-                  Keyword intelligence
-                </span>
-                <span className="inline-flex w-full items-center justify-center rounded-full border border-white/10 bg-white/5 px-3 py-2 text-center">
-                  Scored output
-                </span>
-              </div>
+              <div className="mt-8 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:gap-3 text-sm text-white/58">
+  {[
+    "Structured parsing",
+    "Section generation",
+    "Keyword intelligence",
+    "Scored output",
+  ].map((item) => (
+    <div key={item} className="flex justify-center sm:block">
+      <span className="inline-flex min-h-[40px] items-center justify-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-center whitespace-nowrap shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:border-[color:var(--luna-200)]/25 hover:bg-white/[0.07]">
+        {item}
+      </span>
+    </div>
+  ))}
+</div>
             </div>
 
             <div className="grid gap-4">
