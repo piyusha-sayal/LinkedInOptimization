@@ -39,6 +39,8 @@ import { createLLMClient } from "./aiClient";
 import {
   normalizeCertificationItems,
   recoverCertificationIssuers,
+  type CertificationLike,
+  type NormalizedCertification,
 } from "./certifications";
 
 const DEFAULT_MODE: OptimizeMode = "Branding";
@@ -60,17 +62,7 @@ const TOKEN_BUDGETS: Record<SectionKey | "structuring", number> = {
   positioning_advice: 700,
 };
 
-type CertificationItem = {
-  name?: string;
-  issuer?: string;
-  issueDate?: string;
-  issueMonth?: string;
-  issueYear?: string;
-  expiryMonth?: string;
-  expiryYear?: string;
-  credentialId?: string;
-  credentialUrl?: string;
-};
+type CertificationItem = CertificationLike;
 
 function sleep(ms: number) {
   return new Promise((res) => setTimeout(res, ms));

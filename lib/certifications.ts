@@ -1,10 +1,21 @@
 // lib/certifications.ts
 import "server-only";
 
-type CertificationLike = {
+export type CertificationLike = {
   name?: string;
   issuer?: string;
   issueDate?: string;
+  issueMonth?: string;
+  issueYear?: string;
+  expiryMonth?: string;
+  expiryYear?: string;
+  credentialId?: string;
+  credentialUrl?: string;
+};
+
+export type NormalizedCertification = {
+  name: string;
+  issuer?: string;
   issueMonth?: string;
   issueYear?: string;
   expiryMonth?: string;
@@ -68,10 +79,7 @@ function splitMonthYear(issueDate?: string): {
 }
 
 /**
- * Extract issuer only when the bracketed text appears at the END of the cert name.
- * Example:
- * "AWS Certified Data Engineer (Amazon Web Services)"
- * -> "Amazon Web Services"
+ * Extract issuer only when bracketed text is at the END of the cert name.
  */
 function extractBracketIssuer(name: string): string | undefined {
   const normalized = clean(name, 200);
@@ -85,8 +93,7 @@ function extractBracketIssuer(name: string): string | undefined {
 }
 
 /**
- * Remove trailing bracket issuer only.
- * Keeps internal parenthetical text intact if it is not at the end.
+ * Remove only trailing bracketed issuer text.
  */
 function stripBracketIssuer(name: string): string {
   const normalized = clean(name, 200);
@@ -124,17 +131,23 @@ function inferIssuerFromName(name: string): string | undefined {
   return undefined;
 }
 
-function normalizeOneCertification(item: CertificationLike): CertificationLike {
+function normalizeOneCertification(
+  item: CertificationLike
+): NormalizedCertification | null {
   const rawName = clean(item.name, 200);
   const cleanedName = stripBracketIssuer(rawName);
+  const finalName = cleanedName || rawName;
+
+  if (!finalName) return null;
+
   const bracketIssuer = extractBracketIssuer(rawName);
   const directIssuer = clean(item.issuer, 120);
-  const inferredIssuer = inferIssuerFromName(cleanedName || rawName);
+  const inferredIssuer = inferIssuerFromName(finalName);
 
   const split = splitMonthYear(item.issueDate);
 
   return {
-    name: cleanedName || rawName,
+    name: finalName,
     issuer: directIssuer || bracketIssuer || inferredIssuer || undefined,
     issueMonth: clean(item.issueMonth, 20) || split.issueMonth,
     issueYear: clean(item.issueYear, 10) || split.issueYear,
@@ -147,17 +160,18 @@ function normalizeOneCertification(item: CertificationLike): CertificationLike {
 
 export function normalizeCertificationItems(
   items: CertificationLike[]
-): CertificationLike[] {
+): NormalizedCertification[] {
   const seen = new Set<string>();
-  const out: CertificationLike[] = [];
+  const out: NormalizedCertification[] = [];
 
   for (const item of items || []) {
     const normalized = normalizeOneCertification(item);
-    const key = `${normalized.name ?? ""}__${normalized.issuer ?? ""}`
+    if (!normalized) continue;
+
+    const key = `${normalized.name}__${normalized.issuer ?? ""}`
       .toLowerCase()
       .trim();
 
-    if (!normalized.name) continue;
     if (seen.has(key)) continue;
 
     seen.add(key);
@@ -170,12 +184,13 @@ export function normalizeCertificationItems(
 export function recoverCertificationIssuers(
   items: CertificationLike[],
   resumeText: string
-): CertificationLike[] {
+): NormalizedCertification[] {
   const text = resumeText || "";
 
   return normalizeCertificationItems(
     (items || []).map((item) => {
       const normalized = normalizeOneCertification(item);
+      if (!normalized) return item;
       if (normalized.issuer) return normalized;
 
       const certName = clean(normalized.name, 120);
