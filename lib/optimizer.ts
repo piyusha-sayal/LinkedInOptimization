@@ -36,21 +36,18 @@ import {
   updateParseSession,
 } from "./sessionStore";
 import { createLLMClient } from "./aiClient";
-
-// ─── Config ─────────────────────────────────────────────────────────────────
+import {
+  normalizeCertificationItems,
+  recoverCertificationIssuers,
+} from "./certifications";
 
 const DEFAULT_MODE: OptimizeMode = "Branding";
 const REQUEST_DELAY_MS = Number(process.env.LLM_REQUEST_DELAY_MS ?? 2000);
 
-// Model tiers — override via env
-const MODEL_STRUCTURE =
-  process.env.NOVA_STRUCTURE_MODEL ?? "nova-2-lite-v1";
-const MODEL_CHEAP =
-  process.env.NOVA_GENERATION_MODEL ?? "nova-2-lite-v1";
-const MODEL_RICH =
-  process.env.NOVA_RICH_MODEL ?? "nova-2-lite-v1";
+const MODEL_STRUCTURE = process.env.NOVA_STRUCTURE_MODEL ?? "nova-2-lite-v1";
+const MODEL_CHEAP = process.env.NOVA_GENERATION_MODEL ?? "nova-2-lite-v1";
+const MODEL_RICH = process.env.NOVA_RICH_MODEL ?? "nova-2-lite-v1";
 
-// Token budgets — tuned per section
 const TOKEN_BUDGETS: Record<SectionKey | "structuring", number> = {
   structuring: 3200,
   headline: 120,
@@ -63,7 +60,17 @@ const TOKEN_BUDGETS: Record<SectionKey | "structuring", number> = {
   positioning_advice: 700,
 };
 
-// ─── Utilities ───────────────────────────────────────────────────────────────
+type CertificationItem = {
+  name?: string;
+  issuer?: string;
+  issueDate?: string;
+  issueMonth?: string;
+  issueYear?: string;
+  expiryMonth?: string;
+  expiryYear?: string;
+  credentialId?: string;
+  credentialUrl?: string;
+};
 
 function sleep(ms: number) {
   return new Promise((res) => setTimeout(res, ms));
@@ -80,8 +87,6 @@ function resolveMode(mode?: string): OptimizeMode {
   return DEFAULT_MODE;
 }
 
-// ─── Sanitizers ──────────────────────────────────────────────────────────────
-
 function clean(value: unknown, maxLen = 4000): string {
   return String(value ?? "")
     .replace(/\s+/g, " ")
@@ -95,6 +100,138 @@ function cleanArr(value: unknown, maxItems = 20, maxLen = 300): string[] {
     .map((item) => clean(item, maxLen))
     .filter(Boolean)
     .slice(0, maxItems);
+}
+
+function certKey(name?: string): string {
+  return clean(name, 200)
+    .replace(/\s*[\(\[]\s*[^\)\]]{2,80}\s*[\)\]]\s*$/, "")
+    .toLowerCase()
+    .trim();
+}
+
+function mergeCertificationItems(
+  source: CertificationItem[],
+  generated: CertificationItem[]
+): CertificationItem[] {
+  const normalizedSource = normalizeCertificationItems(source || []);
+  const normalizedGenerated = normalizeCertificationItems(generated || []);
+
+  if (!normalizedGenerated.length) {
+    return normalizedSource;
+  }
+
+  const sourceByKey = new Map(
+    normalizedSource.map((item) => [certKey(item.name), item])
+  );
+
+  const usedKeys = new Set<string>();
+
+  const mergedInGeneratedOrder = normalizedGenerated.map((item) => {
+    const key = certKey(item.name);
+    const sourceMatch = sourceByKey.get(key);
+
+    if (key) usedKeys.add(key);
+
+    return {
+      ...sourceMatch,
+      ...item,
+      name: item.name || sourceMatch?.name || undefined,
+      issuer: item.issuer || sourceMatch?.issuer || undefined,
+      credentialId: item.credentialId || sourceMatch?.credentialId || undefined,
+      credentialUrl: item.credentialUrl || sourceMatch?.credentialUrl || undefined,
+      issueMonth: item.issueMonth || sourceMatch?.issueMonth || undefined,
+      issueYear: item.issueYear || sourceMatch?.issueYear || undefined,
+      expiryMonth: item.expiryMonth || sourceMatch?.expiryMonth || undefined,
+      expiryYear: item.expiryYear || sourceMatch?.expiryYear || undefined,
+    };
+  });
+
+  const remainingSource = normalizedSource.filter(
+    (item) => !usedKeys.has(certKey(item.name))
+  );
+
+  return normalizeCertificationItems([
+    ...mergedInGeneratedOrder,
+    ...remainingSource,
+  ]);
+}
+
+type MultiOptionText = {
+  primary: string;
+  options: string[];
+};
+
+function uniqueStrings(items: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const item of items) {
+    const value = clean(item, 300);
+    if (!value) continue;
+
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    out.push(value);
+  }
+
+  return out;
+}
+
+function sanitizeMultiOptionText(
+  input: unknown,
+  maxLenPerOption: number,
+  fallback = ""
+): MultiOptionText {
+  const src =
+    input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+
+  const rawPrimary = clean(src.primary, maxLenPerOption);
+  const rawOptions = Array.isArray(src.options)
+    ? src.options.map((x) => clean(x, maxLenPerOption))
+    : [];
+
+  const options = uniqueStrings(rawOptions.filter(Boolean)).slice(0, 5);
+
+  const primary = rawPrimary || options[0] || clean(fallback, maxLenPerOption);
+
+  const finalOptions = uniqueStrings([primary, ...options].filter(Boolean)).slice(
+    0,
+    5
+  );
+
+  return {
+    primary,
+    options: finalOptions,
+  };
+}
+
+function coerceMultiOptionTextFromLines(
+  raw: string,
+  maxLenPerOption: number,
+  fallback = ""
+): MultiOptionText {
+  const lines = String(raw ?? "")
+    .split(/\r?\n/)
+    .map((line) =>
+      clean(
+        line
+          .replace(/^[\-\*\d\.\)\s]+/, "")
+          .replace(/^["']|["']$/g, ""),
+        maxLenPerOption
+      )
+    )
+    .filter(Boolean);
+
+  return sanitizeMultiOptionText(
+    {
+      primary: lines[0] || fallback,
+      options: lines,
+    },
+    maxLenPerOption,
+    fallback
+  );
 }
 
 function sanitizeStructuredResume(input: unknown): StructuredResume {
@@ -147,18 +284,24 @@ function sanitizeStructuredResume(input: unknown): StructuredResume {
 
   const skills = cleanArr(src.skills, 50, 120);
 
-  const certifications = Array.isArray(src.certifications)
+  const certificationsRaw = Array.isArray(src.certifications)
     ? src.certifications.slice(0, 15).map((item: unknown) => {
         const c = (item ?? {}) as Record<string, unknown>;
         return {
           name: clean(c.name ?? c, 200),
           issuer: clean(c.issuer, 200) || undefined,
           issueDate: clean(c.issueDate, 50) || undefined,
+          issueMonth: clean(c.issueMonth, 20) || undefined,
+          issueYear: clean(c.issueYear, 10) || undefined,
+          expiryMonth: clean(c.expiryMonth, 20) || undefined,
+          expiryYear: clean(c.expiryYear, 10) || undefined,
           credentialId: clean(c.credentialId, 100) || undefined,
           credentialUrl: clean(c.credentialUrl, 300) || undefined,
         };
       })
     : [];
+
+  const certifications = normalizeCertificationItems(certificationsRaw);
 
   const projects = Array.isArray(src.projects)
     ? src.projects.slice(0, 8).map((item: unknown) => {
@@ -217,8 +360,6 @@ function mergeContext(
   };
 }
 
-// ─── Section Generators ───────────────────────────────────────────────────────
-
 async function rewriteExperienceSeparately(
   llm: ReturnType<typeof createLLMClient>,
   structured: StructuredResume,
@@ -262,21 +403,58 @@ export async function generateSectionData(
   switch (section) {
     case "headline": {
       const spec = generateHeadlinePrompt(structured, ctx, mode);
-      const out = await llm.generateText({
-        model: MODEL_CHEAP,
-        instructions: `${SYSTEM_INSTRUCTIONS}\nReturn plain text only. No JSON. No quotes.`,
-        input: spec.userPrompt,
-        maxOutputTokens: TOKEN_BUDGETS.headline,
-        temperature: 0.15,
-      });
-      return clean(out.replace(/^["']|["']$/g, ""), 220);
+
+      try {
+        const out = await llm.generateJSON<{
+          primary?: string;
+          options?: string[];
+        }>({
+          model: MODEL_CHEAP,
+          instructions: `${SYSTEM_INSTRUCTIONS}
+Return valid JSON only.
+Shape:
+{
+  "primary": "best headline option",
+  "options": ["option 1", "option 2", "option 3", "option 4", "option 5"]
+}
+Rules:
+- Write 5 distinct LinkedIn headline options.
+- Each must be under 220 characters.
+- No markdown.
+- No explanation.
+- Use only accurate information from the resume and context.
+- "primary" must also appear in "options".`,
+          input: spec.userPrompt,
+          maxOutputTokens: TOKEN_BUDGETS.headline * 5,
+          temperature: 0.25,
+        });
+
+        return sanitizeMultiOptionText(out, 220);
+      } catch {
+        const fallbackText = await llm.generateText({
+          model: MODEL_CHEAP,
+          instructions: `${SYSTEM_INSTRUCTIONS}
+Return plain text only.
+Write exactly 5 headline options.
+One option per line.
+No numbering.
+No markdown.
+Each must be under 220 characters.`,
+          input: spec.userPrompt,
+          maxOutputTokens: TOKEN_BUDGETS.headline * 5,
+          temperature: 0.25,
+        });
+
+        return coerceMultiOptionTextFromLines(fallbackText, 220);
+      }
     }
 
     case "about": {
       const spec = generateAboutPrompt(structured, ctx, mode);
       const out = await llm.generateText({
         model: MODEL_RICH,
-        instructions: `${SYSTEM_INSTRUCTIONS}\nReturn plain text only. No JSON. No section headers.`,
+        instructions: `${SYSTEM_INSTRUCTIONS}
+Return plain text only. No JSON. No section headers.`,
         input: spec.userPrompt,
         maxOutputTokens: TOKEN_BUDGETS.about,
         temperature: 0.2,
@@ -309,7 +487,15 @@ export async function generateSectionData(
         maxOutputTokens: TOKEN_BUDGETS.certifications,
         temperature: 0,
       });
-      return Array.isArray(out?.certifications) ? out.certifications : [];
+
+      const items = Array.isArray(out?.certifications)
+        ? (out.certifications as CertificationItem[])
+        : [];
+
+      return mergeCertificationItems(
+        (structured.certifications || []) as CertificationItem[],
+        items
+      );
     }
 
     case "projects": {
@@ -326,21 +512,59 @@ export async function generateSectionData(
 
     case "banner_tagline": {
       const spec = generateBannerTaglinePrompt(structured, ctx, mode);
-      const out = await llm.generateText({
-        model: MODEL_CHEAP,
-        instructions: `${SYSTEM_INSTRUCTIONS}\nReturn plain text only. No JSON. No quotes.`,
-        input: spec.userPrompt,
-        maxOutputTokens: TOKEN_BUDGETS.banner_tagline,
-        temperature: 0.25,
-      });
-      return clean(out.replace(/^["']|["']$/g, ""), 120);
+
+      try {
+        const out = await llm.generateJSON<{
+          primary?: string;
+          options?: string[];
+        }>({
+          model: MODEL_CHEAP,
+          instructions: `${SYSTEM_INSTRUCTIONS}
+Return valid JSON only.
+Shape:
+{
+  "primary": "best banner tagline",
+  "options": ["option 1", "option 2", "option 3", "option 4", "option 5"]
+}
+Rules:
+- Write 5 distinct LinkedIn banner tagline options.
+- Each must be 3 to 8 words.
+- No emojis.
+- No quotes.
+- No markdown.
+- Keep them premium, concise, and accurate.
+- "primary" must also appear in "options".`,
+          input: spec.userPrompt,
+          maxOutputTokens: TOKEN_BUDGETS.banner_tagline * 5,
+          temperature: 0.35,
+        });
+
+        return sanitizeMultiOptionText(out, 80);
+      } catch {
+        const fallbackText = await llm.generateText({
+          model: MODEL_CHEAP,
+          instructions: `${SYSTEM_INSTRUCTIONS}
+Return plain text only.
+Write exactly 5 banner tagline options.
+One option per line.
+No numbering.
+No markdown.
+Each must be 3 to 8 words.`,
+          input: spec.userPrompt,
+          maxOutputTokens: TOKEN_BUDGETS.banner_tagline * 5,
+          temperature: 0.35,
+        });
+
+        return coerceMultiOptionTextFromLines(fallbackText, 80);
+      }
     }
 
     case "positioning_advice": {
       const spec = generatePositioningAdvicePrompt(structured, ctx, mode);
       const out = await llm.generateText({
         model: MODEL_RICH,
-        instructions: `${SYSTEM_INSTRUCTIONS}\nReturn plain text. Use the labeled sections specified. No JSON. No markdown fences.`,
+        instructions: `${SYSTEM_INSTRUCTIONS}
+Return plain text. Use the labeled sections specified. No JSON. No markdown fences.`,
         input: spec.userPrompt,
         maxOutputTokens: TOKEN_BUDGETS.positioning_advice,
         temperature: 0.15,
@@ -353,8 +577,6 @@ export async function generateSectionData(
   }
 }
 
-// ─── Full Mode Generation ─────────────────────────────────────────────────────
-
 async function generateOneMode(
   llm: ReturnType<typeof createLLMClient>,
   structured: StructuredResume,
@@ -363,15 +585,35 @@ async function generateOneMode(
 ): Promise<ModeResult> {
   const modeCtx = { ...ctx, mode };
 
-  const headline = (await generateSectionData(llm, structured, modeCtx, "headline")) as string;
+  const headline = (await generateSectionData(
+    llm,
+    structured,
+    modeCtx,
+    "headline"
+  )) as unknown as BrandingVersion["headline"];
   await pace();
 
-  const about = (await generateSectionData(llm, structured, modeCtx, "about")) as string;
+  const about = (await generateSectionData(
+    llm,
+    structured,
+    modeCtx,
+    "about"
+  )) as string;
   await pace();
 
-  const experience = (await generateSectionData(llm, structured, modeCtx, "experience")) as ResumeRole[];
+  const experience = (await generateSectionData(
+    llm,
+    structured,
+    modeCtx,
+    "experience"
+  )) as ResumeRole[];
 
-  const skills = (await generateSectionData(llm, structured, modeCtx, "skills")) as string[];
+  const skills = (await generateSectionData(
+    llm,
+    structured,
+    modeCtx,
+    "skills"
+  )) as string[];
   await pace();
 
   const certifications = (await generateSectionData(
@@ -395,7 +637,7 @@ async function generateOneMode(
     structured,
     modeCtx,
     "banner_tagline"
-  )) as string;
+  )) as unknown as BrandingVersion["banner_tagline"];
   await pace();
 
   const positioning_advice = (await generateSectionData(
@@ -421,8 +663,6 @@ async function generateOneMode(
   return { mode, profile, keywords, score, positioning_advice };
 }
 
-// ─── Public API ───────────────────────────────────────────────────────────────
-
 export async function parseResumeSession(file: UploadedFile, ctx: UserContext) {
   const llm = createLLMClient();
 
@@ -438,6 +678,12 @@ export async function parseResumeSession(file: UploadedFile, ctx: UserContext) {
   });
 
   const structured = sanitizeStructuredResume(structuredRaw);
+
+  structured.certifications = recoverCertificationIssuers(
+    structured.certifications || [],
+    parsed.cleanedText
+  );
+
   const sessionId = crypto.randomUUID();
   const mergedCtx = mergeContext(ctx, {});
 
@@ -460,10 +706,6 @@ export async function parseResumeSession(file: UploadedFile, ctx: UserContext) {
   };
 }
 
-/**
- * Use parsed structured resume directly, without requiring in-memory session storage.
- * This is the fallback path for worker-restored workspaces.
- */
 export async function optimizeSectionFromStructured(
   structuredInput: StructuredResume,
   section: SectionKey,
@@ -486,9 +728,6 @@ export async function optimizeSectionFromStructured(
   return data;
 }
 
-/**
- * Step 2: Generate a single section using the parsed session.
- */
 export async function optimizeSectionFromSession(
   id: string,
   section: SectionKey,
@@ -510,9 +749,6 @@ export async function optimizeSectionFromSession(
   return { section, data };
 }
 
-/**
- * Legacy bulk pipeline.
- */
 export async function runOptimizationPipeline(
   file: UploadedFile,
   ctx: UserContext
@@ -531,6 +767,12 @@ export async function runOptimizationPipeline(
   });
 
   const structured = sanitizeStructuredResume(structuredRaw);
+
+  structured.certifications = recoverCertificationIssuers(
+    structured.certifications || [],
+    parsed.cleanedText
+  );
+
   await pace();
 
   const mode = resolveMode(ctx.mode);

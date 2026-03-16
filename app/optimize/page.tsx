@@ -88,6 +88,11 @@ type ExperienceItem = {
   skills?: string[];
 };
 
+type MultiOptionOutput = {
+  primary?: string;
+  options?: string[];
+};
+
 type RazorpayCheckoutResponse = {
   razorpay_payment_id: string;
   razorpay_order_id: string;
@@ -247,8 +252,134 @@ function stripEmDash(text: string): string {
   return text.replace(/\u2014/g, " - ").replace(/  +/g, " ").trim();
 }
 
+function isMultiOptionOutput(value: unknown): value is MultiOptionOutput {
+  if (!value || typeof value !== "object") return false;
+  const maybe = value as Record<string, unknown>;
+  return typeof maybe.primary === "string" || Array.isArray(maybe.options);
+}
+
+function normalizeMultiOptionOutput(value: unknown): MultiOptionOutput {
+  if (!isMultiOptionOutput(value)) return { primary: "", options: [] };
+
+  const rawPrimary =
+    typeof value.primary === "string" ? stripEmDash(value.primary) : "";
+
+  const rawOptions = Array.isArray(value.options)
+    ? value.options
+        .map((item) => stripEmDash(String(item ?? "")))
+        .filter(Boolean)
+    : [];
+
+  const uniqueOptions: string[] = [];
+  const seen = new Set<string>();
+
+  for (const option of [rawPrimary, ...rawOptions]) {
+    const cleanOption = option.trim();
+    if (!cleanOption) continue;
+
+    const key = cleanOption.toLowerCase();
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    uniqueOptions.push(cleanOption);
+  }
+
+  return {
+    primary: uniqueOptions[0] || rawPrimary || "",
+    options: uniqueOptions,
+  };
+}
+
+function formatMultiOptionOutput(value: unknown): string {
+  const normalized = normalizeMultiOptionOutput(value);
+  if (!normalized.options?.length) return normalized.primary || "";
+
+  const otherOptions = normalized.options.filter(
+    (option) => option.toLowerCase() !== normalized.primary?.toLowerCase()
+  );
+
+  const lines: string[] = [];
+
+  if (normalized.primary) {
+    lines.push("Top pick:");
+    lines.push(normalized.primary);
+  }
+
+  if (otherOptions.length) {
+    if (lines.length) lines.push("");
+    lines.push("More options:");
+    otherOptions.forEach((option, index) => {
+      lines.push(`${index + 2}. ${option}`);
+    });
+  }
+
+  return lines.join("\n").trim();
+}
+
+function getCopyText(section: SectionKey, data: unknown): string {
+  if (
+    (section === "headline" || section === "banner_tagline") &&
+    isMultiOptionOutput(data)
+  ) {
+    const normalized = normalizeMultiOptionOutput(data);
+    return normalized.primary || formatMultiOptionOutput(data);
+  }
+
+  return formatSectionOutput(section, data);
+}
+
 function formatSectionOutput(section: SectionKey, data: unknown): string {
   if (data == null) return "";
+
+  const formatMultiOption = (value: unknown): string => {
+    if (!value || typeof value !== "object") return prettyPrint(value);
+
+    const obj = value as { primary?: unknown; options?: unknown };
+    const primary =
+      typeof obj.primary === "string" ? stripEmDash(obj.primary) : "";
+
+    const options = Array.isArray(obj.options)
+      ? obj.options
+          .map((item) => stripEmDash(String(item ?? "")))
+          .filter(Boolean)
+      : [];
+
+    const merged = [primary, ...options].filter(Boolean);
+    const unique: string[] = [];
+    const seen = new Set<string>();
+
+    for (const item of merged) {
+      const key = item.toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      unique.push(item.trim());
+    }
+
+    if (!unique.length) return "";
+    if (unique.length === 1) return unique[0];
+
+    const lines: string[] = [];
+    lines.push("Top pick:");
+    lines.push(unique[0]);
+    lines.push("");
+    lines.push("More options:");
+
+    unique.slice(1).forEach((option, index) => {
+      lines.push(`${index + 2}. ${option}`);
+    });
+
+    return lines.join("\n").trim();
+  };
+
+  if (
+    (section === "headline" || section === "banner_tagline") &&
+    typeof data === "object" &&
+    data !== null &&
+    ("primary" in data || "options" in data)
+  ) {
+    return formatMultiOption(data);
+  }
+
   if (typeof data === "string") return stripEmDash(data);
 
   switch (section) {
@@ -412,7 +543,7 @@ function formatSectionOutput(section: SectionKey, data: unknown): string {
 }
 
 async function copySectionOutput(section: SectionKey, data: unknown) {
-  const text = formatSectionOutput(section, data);
+  const text = getCopyText(section, data);
   if (text) await navigator.clipboard.writeText(text);
 }
 

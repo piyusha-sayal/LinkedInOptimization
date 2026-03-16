@@ -238,7 +238,6 @@ export async function POST(req: Request) {
 
     let resultData: unknown = null;
 
-    // 1) Try session-based optimization first
     if (id) {
       try {
         const result = await optimizeSectionFromSession(id, section, overrides);
@@ -257,13 +256,11 @@ export async function POST(req: Request) {
       }
     }
 
-    // 2) Fallback to workspace-based optimization
     if (resultData === null) {
       if (!workspaceId) {
         return NextResponse.json(
           {
-            error:
-              "Session not found or expired. Please re-parse your resume.",
+            error: "Session not found or expired. Please re-parse your resume.",
           },
           { status: 404 }
         );
@@ -312,7 +309,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3) Persist generated result back to worker/D1
     if (workspaceId) {
       await persistGeneratedSection({
         workspaceId,
@@ -322,10 +318,7 @@ export async function POST(req: Request) {
       });
     }
 
-    return NextResponse.json(
-      { section, data: resultData },
-      { status: 200 }
-    );
+    return NextResponse.json({ section, data: resultData }, { status: 200 });
   } catch (e: unknown) {
     console.error("❌ /api/optimize-section failed:", e);
     const msg = e instanceof Error ? e.message : "Section optimization failed.";

@@ -66,7 +66,7 @@ function modeGuidance(mode: OptimizeMode): string {
       return `
 Mode: Branding
 - Write for human readers first, algorithms second
-- Differentiated, authentic voice — avoid clichés like "passionate" or "results-driven"
+- Differentiated, authentic voice - avoid clichés like "passionate" or "results-driven"
 - Lead with unique value proposition and concrete proof points
 - Keyword integration should feel natural, not stuffed
 - Tone: confident, credible, specific
@@ -102,7 +102,9 @@ function profileSnapshot(structured: StructuredResume) {
   const basics = structured.basics || {};
   const exp = (structured.experience || []).slice(0, 5);
   const skills = cleanArray(structured.skills, 20);
-  const certs = (structured.certifications || []).slice(0, 6).map((c) => cleanText(c.name, 100));
+  const certs = (structured.certifications || [])
+    .slice(0, 6)
+    .map((c) => cleanText(c.name, 100));
   const projects = (structured.projects || []).slice(0, 4).map((p) => ({
     name: cleanText(p.name, 100),
     tech: cleanArray(p.tech, 8),
@@ -257,16 +259,23 @@ const PROJECTS_SCHEMA = {
       items: {
         type: "object",
         properties: {
-          name:            { type: "string",  description: "Project name (required by LinkedIn)" },
-          description:     { type: "string",  description: "Up to 2000 chars. LinkedIn's actual limit." },
-          skills:          { type: "array", items: { type: "string" }, description: "Top 5 skills used — LinkedIn recommends adding these" },
-          startMonth:      { type: "string",  description: "Month name e.g. January" },
-          startYear:       { type: "string",  description: "4-digit year e.g. 2022" },
-          endMonth:        { type: "string",  description: "Month name or empty if ongoing" },
-          endYear:         { type: "string",  description: "4-digit year or empty if ongoing" },
-          currentlyWorking:{ type: "boolean", description: "true if still working on it" },
-          associatedWith:  { type: "string",  description: "Company/role name this project was part of, if applicable" },
-          url:             { type: "string",  description: "Project URL if available" },
+          name: { type: "string", description: "Project name (required by LinkedIn)" },
+          description: { type: "string", description: "Up to 2000 chars. LinkedIn's actual limit." },
+          skills: {
+            type: "array",
+            items: { type: "string" },
+            description: "Top 5 skills used - LinkedIn recommends adding these",
+          },
+          startMonth: { type: "string", description: "Month name e.g. January" },
+          startYear: { type: "string", description: "4-digit year e.g. 2022" },
+          endMonth: { type: "string", description: "Month name or empty if ongoing" },
+          endYear: { type: "string", description: "4-digit year or empty if ongoing" },
+          currentlyWorking: { type: "boolean", description: "true if still working on it" },
+          associatedWith: {
+            type: "string",
+            description: "Company/role name this project was part of, if applicable",
+          },
+          url: { type: "string", description: "Project URL if available" },
         },
         required: ["name", "description"],
       },
@@ -278,13 +287,17 @@ const PROJECTS_SCHEMA = {
 const SINGLE_ROLE_SCHEMA = {
   type: "object",
   properties: {
-    company:   { type: "string" },
-    title:     { type: "string" },
+    company: { type: "string" },
+    title: { type: "string" },
     startDate: { type: "string" },
-    endDate:   { type: "string" },
-    location:  { type: "string" },
-    bullets:   { type: "array", items: { type: "string" } },
-    skills:    { type: "array", items: { type: "string" }, description: "Top 5-8 tools and technologies used in this specific role" },
+    endDate: { type: "string" },
+    location: { type: "string" },
+    bullets: { type: "array", items: { type: "string" } },
+    skills: {
+      type: "array",
+      items: { type: "string" },
+      description: "Top 5-8 tools and technologies used in this specific role",
+    },
   },
   required: ["company", "title", "bullets"],
 };
@@ -292,41 +305,55 @@ const SINGLE_ROLE_SCHEMA = {
 // ─── Prompt Generators ──────────────────────────────────────────────────────
 
 export function generateResumeStructuringPrompt(rawText: string): PromptSpec {
-  const cleaned = cleanText(rawText, 12000); // raised from 7000 — rich resumes can be 8k–12k chars
+  const cleaned = cleanText(rawText, 8000);
+
   return {
     schemaName: "StructuredResume",
     schema: RESUME_SCHEMA,
     userPrompt: `
 Extract all resume information into structured JSON. Follow these rules precisely:
 
-NAME EXTRACTION (critical — do not skip):
-- The candidate's name is almost always the FIRST line or the largest text at the top of the resume
-- It is typically 2–4 words: first name + optional middle + last name
-- It will NOT be labeled "Name:" — just look for the first prominent standalone proper noun(s)
-- Do NOT confuse it with a company name or job title
-- If you can identify a plausible human name at or near the top, use it — even if unlabeled
-- Only leave basics.name empty if the text provides absolutely no identifiable person name
+NAME EXTRACTION:
+- The candidate's name is usually the first prominent person name near the top
+- It is often 2-4 words
+- Do not confuse the name with a company name or job title
+- Only leave basics.name empty if no plausible human name exists
 
-EXPERIENCE EXTRACTION (critical — do not skip):
-- Extract ALL jobs, roles, and positions — do not stop at 2 or 3
-- A role entry starts when you see a company name + job title + date range together
-- Dates appear in many formats: "Jan 2021 – Mar 2023", "2021-2023", "Jan'21 – Present", "01/2021 to 03/2023" — extract them all
-- If dates are not clearly present, still extract the role with empty date fields
-- If bullet points are not clearly listed, still extract the role with an empty bullets array
-- Do NOT skip a role just because its formatting is unusual
-- Extract up to 10 experience entries
+EXPERIENCE EXTRACTION:
+- Extract all roles you can identify
+- A role usually contains title, company, and date range
+- If bullets are missing, still return the role with an empty bullets array
+- Extract up to 10 roles
 
-GENERAL EXTRACTION RULES:
-- Preserve exact company names, job titles, and dates as written
-- Split compound roles into separate entries if dates differ
-- For bullets: extract meaningful accomplishments; up to 6 per role
-- For skills: extract all explicitly mentioned tools, technologies, and methodologies (no cap)
-- For certifications: include if explicitly named; issuer can be inferred from cert name if obvious
-- For projects: include if described with any meaningful detail
-- Keep the summary field empty if no summary exists — do NOT generate one
-- Extract email, phone, location, LinkedIn URL, GitHub URL if present
+CERTIFICATION EXTRACTION:
+- Extract certifications into structured objects
+- If a certification includes the issuing organization in trailing parentheses or square brackets, move that text into the "issuer" field
+- Remove that trailing bracketed issuer text from the "name" field
+- Example:
+  "AWS Certified Data Engineer (Amazon Web Services)"
+  -> { "name": "AWS Certified Data Engineer", "issuer": "Amazon Web Services" }
+- Example:
+  "Data Analytics [Accenture]"
+  -> { "name": "Data Analytics", "issuer": "Accenture" }
+- If issuer is already clearly written separately, preserve it
+- Do not invent issuers that are not present or not strongly inferable
+- Keep credential IDs and URLs exactly when present
 
-OUTPUT: Compact JSON only. No markdown. No code fences. Return the FULL JSON — do not truncate.
+GENERAL RULES:
+- Preserve company names, titles, dates, links, and credentials exactly when present
+- Do not invent employers, achievements, certifications, tools, or dates
+- Keep summary empty if none exists
+- Skills should include explicitly mentioned tools, technologies, and methods
+- Certifications should include issuer when present or clearly inferable
+- Projects should be included when meaningful detail exists
+
+CRITICAL OUTPUT RULES:
+- Return ONE valid JSON object only
+- Do not return markdown
+- Do not return bullet points
+- Do not add commentary before or after the JSON
+- The first character of your response must be {
+- The last character of your response must be }
 
 RESUME TEXT:
 ${cleaned}
@@ -343,26 +370,36 @@ export function generateHeadlinePrompt(
   const hasJD = !!ctx.targetJobText?.trim();
 
   return {
-    schemaName: "HeadlineResult",
+    schemaName: "HeadlineOptionsResult",
     schema: {},
     userPrompt: `
-Generate ONE LinkedIn headline for this professional.
+Generate 5 distinct LinkedIn headline options for this professional.
 
 ${compactJson(payload)}
 
 HEADLINE RULES:
-- Maximum 220 characters (LinkedIn hard limit)
-- Must include the target role or a close variation: "${ctx.targetRole}"
+- Each option must be under 220 characters
+- Each option must include the target role or a close variation: "${ctx.targetRole}"
 - Seniority level: ${ctx.seniority}
-- ${hasJD ? "Mirror 1–2 exact keyword phrases from the job description" : "Use 1–2 high-signal keywords from their actual skill set"}
+- ${hasJD ? 'Mirror 1-2 exact keyword phrases from the job description where accurate' : "Use 1-2 high-signal keywords from their actual skill set"}
 - No emojis, no hashtags, no generic filler ("passionate about", "results-driven")
-- Structure options (pick the best fit):
+- Use only accurate information from the profile
+- Vary the style across the 5 options:
+  1. recruiter / keyword-rich
+  2. credibility / value proposition
+  3. technical specialization
+  4. leadership / impact
+  5. concise premium brand
+- Good structures:
   a) [Role] | [Key Skill] | [Value Prop]
-  b) [Role] specializing in [Domain] — [Achievement/Context]  
-  c) [Role] @ [Company type/size] | [Top 2 skills]
-- The headline must be grounded in their actual background — no invented claims
+  b) [Role] specializing in [Domain] - [Achievement/Context]
+  c) [Role] | [Top 2 skills] | [Business impact]
+- Do not invent metrics, tools, scope, or employers
 
-RETURN: Plain text only. One headline. No quotes. No JSON.
+RETURN:
+- A best single option as "primary"
+- 5 distinct options total
+- JSON only
     `.trim(),
   };
 }
@@ -384,9 +421,9 @@ Write ONE LinkedIn About section for this professional.
 ${compactJson(payload)}
 
 ABOUT SECTION RULES:
-- Length: 200–400 words (ideal LinkedIn range)
+- Length: 200-400 words (ideal LinkedIn range)
 - Structure:
-  1. Hook (1–2 sentences): Who they are + primary value — avoid "I am a [job title]" openers
+  1. Hook (1-2 sentences): Who they are + primary value - avoid "I am a [job title]" openers
   2. Core expertise paragraph: What they do best, grounded in their actual experience
   3. Impact/proof paragraph: Specific accomplishments, projects, or scope (only what's supported by the data)
   4. ${hasJD ? "Alignment paragraph: How their background maps to the target role requirements" : "What they bring: Unique combination of skills or cross-domain value"}
@@ -471,7 +508,7 @@ Generate an optimized LinkedIn skills list for this professional.
 ${compactJson(payload)}
 
 SKILLS RULES:
-- Return 25–40 skills total
+- Return 25-40 skills total
 - Priority order:
   1. Skills explicitly listed in their profile (always include these)
   2. Skills clearly demonstrated in their experience bullets
@@ -494,17 +531,22 @@ export function generateCertificationsPrompt(
   ctx: UserContext,
   mode: OptimizeMode
 ): PromptSpec {
-  const certs = (structured.certifications || []).slice(0, 10).map((c) => ({
-    name:          cleanText(c.name, 150),
-    issuer:        cleanText(c.issuer, 100),
-    issueDate:     cleanText(c.issueDate, 40),
-    credentialId:  cleanText(c.credentialId, 80),
-    credentialUrl: cleanText(c.credentialUrl, 200),
-  }));
+  const certs = (structured.certifications || []).slice(0, 10).map((c) => {
+    const cert = c as unknown as Record<string, unknown>;
 
-  // LinkedIn "Add license or certification" fields:
-  // Name (required), Issuing organization, Issue date (Month + Year),
-  // Expiration date, Credential ID, Credential URL
+    return {
+      name: cleanText(cert.name, 150),
+      issuer: cleanText(cert.issuer, 100),
+      issueDate: cleanText(cert.issueDate, 40),
+      issueMonth: cleanText(cert.issueMonth, 20),
+      issueYear: cleanText(cert.issueYear, 10),
+      expiryMonth: cleanText(cert.expiryMonth, 20),
+      expiryYear: cleanText(cert.expiryYear, 10),
+      credentialId: cleanText(cert.credentialId, 80),
+      credentialUrl: cleanText(cert.credentialUrl, 200),
+    };
+  });
+
   return {
     schemaName: "CertificationsResult",
     schema: {
@@ -515,14 +557,14 @@ export function generateCertificationsPrompt(
           items: {
             type: "object",
             properties: {
-              name:          { type: "string", description: "Certification name — required on LinkedIn" },
-              issuer:        { type: "string", description: "Issuing organization name" },
-              issueMonth:    { type: "string", description: "Month name e.g. January — LinkedIn asks for month separately" },
-              issueYear:     { type: "string", description: "4-digit year e.g. 2023" },
-              expiryMonth:   { type: "string", description: "Expiry month if applicable, else omit" },
-              expiryYear:    { type: "string", description: "Expiry year if applicable, else omit" },
-              credentialId:  { type: "string", description: "Credential ID — paste directly into LinkedIn" },
-              credentialUrl: { type: "string", description: "Credential URL — paste directly into LinkedIn" },
+              name: { type: "string", description: "Certification name - required on LinkedIn" },
+              issuer: { type: "string", description: "Issuing organization name" },
+              issueMonth: { type: "string", description: "Month name e.g. January - LinkedIn asks for month separately" },
+              issueYear: { type: "string", description: "4-digit year e.g. 2023" },
+              expiryMonth: { type: "string", description: "Expiry month if applicable, else omit" },
+              expiryYear: { type: "string", description: "Expiry year if applicable, else omit" },
+              credentialId: { type: "string", description: "Credential ID - paste directly into LinkedIn" },
+              credentialUrl: { type: "string", description: "Credential URL - paste directly into LinkedIn" },
             },
             required: ["name"],
           },
@@ -545,12 +587,19 @@ Target role: ${ctx.targetRole}
 Certifications from resume: ${compactJson(certs)}
 
 RULES:
-- Output ONLY certifications present in the input data — never invent new ones
-- Infer the issuer from the cert name when obvious (e.g. "AWS Certified" → issuer: "Amazon Web Services", "Google Cloud" → issuer: "Google", "IBM" → issuer: "IBM")
-- Split issueDate into issueMonth + issueYear (e.g. "Jan 2023" → month: "January", year: "2023")
+- Output ONLY certifications present in the input data - never invent new ones
+- If issuer is already present in the input certification, preserve it exactly
+- Never drop or blank out an existing issuer
+- If the certification name includes trailing issuer text in parentheses or square brackets, move it to issuer
+- Example:
+  "AWS Certified Data Engineer (Amazon Web Services)"
+  -> name: "AWS Certified Data Engineer", issuer: "Amazon Web Services"
+- Infer the issuer from the cert name only when obvious (e.g. "AWS Certified" -> issuer: "Amazon Web Services", "Google Cloud" -> issuer: "Google", "IBM" -> issuer: "IBM")
+- Preserve existing issueMonth, issueYear, expiryMonth, expiryYear when already present
+- If only issueDate is present, split issueDate into issueMonth + issueYear (e.g. "Jan 2023" -> month: "January", year: "2023")
 - If only a year is present, leave issueMonth empty
-- Reorder by relevance to: ${ctx.targetRole} (most relevant first)
 - Preserve credentialId and credentialUrl exactly as given
+- Reorder by relevance to: ${ctx.targetRole} (most relevant first)
 - Return compact JSON, no markdown, no code fences
 
 RETURN: JSON object with "certifications" array only.
@@ -564,21 +613,17 @@ export function generateProjectsPrompt(
   mode: OptimizeMode
 ): PromptSpec {
   const projects = (structured.projects || []).slice(0, 5).map((p) => ({
-    name:        cleanText(p.name, 120),
+    name: cleanText(p.name, 120),
     description: cleanText(p.description, 600),
-    tech:        cleanArray(p.tech, 10),
-    link:        cleanText(p.link, 200),
+    tech: cleanArray(p.tech, 10),
+    link: cleanText(p.link, 200),
   }));
 
-  // Derive company names from experience so model can suggest "associatedWith"
-  const companies = (structured.experience || []).slice(0, 6).map((r) =>
-    cleanText(r.company, 80)
-  ).filter(Boolean);
+  const companies = (structured.experience || [])
+    .slice(0, 6)
+    .map((r) => cleanText(r.company, 80))
+    .filter(Boolean);
 
-  // LinkedIn "Add project" form fields:
-  // Project name (required), Description (2000 char limit),
-  // Skills (top 5 recommended), Media, Currently working (checkbox),
-  // Start date (Month + Year), End date (Month + Year), Associated with (company)
   return {
     schemaName: "ProjectsResult",
     schema: PROJECTS_SCHEMA,
@@ -587,7 +632,7 @@ Rewrite project entries for direct entry into LinkedIn's "Add project" form.
 
 LinkedIn's "Add project" form has exactly these fields:
 1. Project name (required)
-2. Description (max 2000 characters — this is LinkedIn's hard limit)
+2. Description (max 2000 characters - this is LinkedIn's hard limit)
 3. Skills: top 5 skills used in the project
 4. Media: (we will skip this)
 5. Currently working on this project: true/false
@@ -601,12 +646,12 @@ Projects source data: ${compactJson(projects)}
 Candidate's companies (for associatedWith): ${companies.join(", ") || "N/A"}
 
 REWRITE RULES:
-- Rewrite ONLY projects present in the source data — do not invent new ones
-- description: 3–5 sentences. Structure: [what was built] → [technologies/approach used] → [outcome or impact]. Max 2000 chars.
+- Rewrite ONLY projects present in the source data - do not invent new ones
+- description: 3-5 sentences. Structure: [what was built] -> [technologies/approach used] -> [outcome or impact]. Max 2000 chars.
 - skills: list up to 5 skills/technologies actually used in this project (from the tech array or description)
 - startMonth / startYear / endMonth / endYear: extract from project data if dates are present, otherwise leave empty strings
 - currentlyWorking: true only if description implies ongoing work
-- associatedWith: if the project was clearly done at one of the candidate's companies, name that company — otherwise leave empty
+- associatedWith: if the project was clearly done at one of the candidate's companies, name that company - otherwise leave empty
 - url: preserve any link from the source data exactly
 - Reorder projects by relevance to: ${ctx.targetRole}
 
@@ -623,10 +668,10 @@ export function generateBannerTaglinePrompt(
   const snap = profileSnapshot(structured);
 
   return {
-    schemaName: "BannerTaglineResult",
+    schemaName: "BannerTaglineOptionsResult",
     schema: {},
     userPrompt: `
-Generate ONE short LinkedIn banner tagline for this professional.
+Generate 5 short LinkedIn banner tagline options for this professional.
 
 Target role: ${ctx.targetRole}
 Seniority: ${ctx.seniority}
@@ -635,17 +680,28 @@ Top skills: ${snap.skills.slice(0, 8).join(", ")}
 Recent title: ${snap.recent_roles[0]?.title || "N/A"} at ${snap.recent_roles[0]?.company || "N/A"}
 
 TAGLINE RULES:
-- 3–8 words maximum
-- Specific to their domain — no generic phrases ("Making an Impact", "Building the Future")
+- Each option must be 3-8 words maximum
+- Specific to their domain - no generic phrases ("Making an Impact", "Building the Future")
 - No emojis, no hashtags
 - Should complement the headline, not repeat it
-- Examples of good taglines:
-  • "Data Engineering at Scale"
-  • "Cloud Infrastructure for Fast-Growing Teams"
-  • "Product Strategy | B2B SaaS | 0→1"
-  • "Full-Stack Engineer. ML Curious."
+- Vary the 5 options across:
+  1. technical authority
+  2. value creation
+  3. leadership / ownership
+  4. domain specialization
+  5. concise premium identity
+- Use only facts supported by the profile
+- Examples of strong directions:
+  • Data Engineering at Scale
+  • Cloud Infrastructure for Growing Teams
+  • ETL, Quality, and Platform Reliability
+  • Product Strategy for B2B SaaS
+  • Building Better Data Systems
 
-RETURN: Plain text only. One tagline. No quotes.
+RETURN:
+- A best single option as "primary"
+- 5 distinct options total
+- JSON only
     `.trim(),
   };
 }
@@ -668,7 +724,7 @@ ${compactJson(payload)}
 Write in plain text using these exact labeled sections:
 
 POSITIONING ANGLE:
-[2–3 sentences on how to position this person for ${ctx.targetRole}. Be specific — reference their actual background.]
+[2-3 sentences on how to position this person for ${ctx.targetRole}. Be specific - reference their actual background.]
 
 STRONGEST PROOF POINTS:
 • [Most credible accomplishment or signal]
@@ -677,7 +733,7 @@ STRONGEST PROOF POINTS:
 (max 4 points, grounded in their actual profile)
 
 KEYWORD STRATEGY:
-[2–3 sentences on which keywords to prioritize, where to place them, and why — based on their target role and actual background]
+[2-3 sentences on which keywords to prioritize, where to place them, and why - based on their target role and actual background]
 
 DE-EMPHASIZE:
 • [One thing that doesn't serve the ${ctx.targetRole} target]
@@ -689,12 +745,12 @@ TOP 3 PROFILE IMPROVEMENTS:
 3. [Third priority]
 
 OUTREACH PITCH (for DMs or cover letters):
-[3–4 lines they could use when reaching out to recruiters or hiring managers for ${ctx.targetRole} roles. Authentic, specific, not generic.]
+[3-4 lines they could use when reaching out to recruiters or hiring managers for ${ctx.targetRole} roles. Authentic, specific, not generic.]
 
 RULES:
 - Every point must reference their actual profile data
 - No invented metrics or fabricated claims
-- Keep each section tight — this is a tactical brief, not an essay
+- Keep each section tight - this is a tactical brief, not an essay
 - If job description was provided, align advice to it
 
 RETURN: Plain text only. Use the section labels above exactly.
