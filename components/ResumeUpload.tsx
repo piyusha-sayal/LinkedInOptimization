@@ -40,19 +40,19 @@ export function ResumeUpload({
 
   return (
     <div
-      className={`rounded-[28px] border p-5 backdrop-blur-2xl transition-all sm:p-6 ${outerClass}`}
+      className={`rounded-[24px] border p-4 backdrop-blur-2xl transition-all sm:rounded-[28px] sm:p-6 ${outerClass}`}
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-3">
-            <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-[color:var(--luna-200)]/20 bg-[color:var(--luna-400)]/20 text-lg text-[color:var(--luna-100)]">
+            <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-[color:var(--luna-200)]/20 bg-[color:var(--luna-400)]/20 text-lg text-[color:var(--luna-100)] sm:h-11 sm:w-11">
               ↑
             </div>
             <div>
-              <div className="text-lg font-semibold text-white">
+              <div className="text-[17px] font-semibold text-white sm:text-lg">
                 Resume Upload
               </div>
-              <div className="mt-1 text-sm leading-6 text-white/68">
+              <div className="mt-1 text-[13px] leading-6 text-white/68 sm:text-sm">
                 Upload PDF or DOCX. Parse your resume into structured profile data.
               </div>
             </div>
@@ -89,7 +89,7 @@ export function ResumeUpload({
           setDragActive(false);
           handleFile(e.dataTransfer.files?.[0]);
         }}
-        className={`mt-5 rounded-[24px] border px-4 py-6 transition-all sm:px-5 sm:py-7 ${dropClass}`}
+        className={`mt-4 rounded-[20px] border px-4 py-5 transition-all sm:mt-5 sm:rounded-[24px] sm:px-5 sm:py-7 ${dropClass}`}
       >
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="min-w-0 flex-1">
@@ -110,7 +110,7 @@ export function ResumeUpload({
             ) : null}
           </div>
 
-          <div className="inline-flex w-fit shrink-0 items-center rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-white/75 transition hover:border-white/20 hover:bg-white/10 whitespace-nowrap">
+          <div className="inline-flex w-full shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-white/75 transition hover:border-white/20 hover:bg-white/10 sm:w-fit whitespace-nowrap">
             Choose file
           </div>
         </div>

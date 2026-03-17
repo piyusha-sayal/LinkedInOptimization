@@ -213,6 +213,145 @@ const LI_LIGHT = "#378fe9";
 const LI_SUBTLE = "rgba(10,102,194,0.15)";
 const LI_BORDER = "rgba(10,102,194,0.3)";
 
+const PHONE_MEDIA = "(max-width: 768px)";
+
+const WORKFLOW_TIPS = [
+  {
+    tip: "Parse once, then use Generate All to unlock the full LinkedIn profile pack in one run.",
+    cat: "Flow",
+  },
+  {
+    tip: "Paste a real job description to improve role alignment and keyword relevance.",
+    cat: "Quality",
+  },
+  {
+    tip: "Use Branding mode for discoverability; switch to Recruiter mode when targeting a specific role.",
+    cat: "Mode",
+  },
+  {
+    tip: "Each section card will open automatically as soon as its result is ready.",
+    cat: "Live",
+  },
+  {
+    tip: "Copy directly from each finished card into LinkedIn — formatting is optimized for pasting.",
+    cat: "Workflow",
+  },
+  {
+    tip: "When signed in, every generated result should persist to your saved workspace.",
+    cat: "Persistence",
+  },
+  {
+    tip: "Uploading a new resume creates a new workspace and keeps your earlier ones in dashboard history.",
+    cat: "History",
+  },
+];
+
+function isPhoneViewport() {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia(PHONE_MEDIA).matches;
+}
+
+function FreeBadge() {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "2px 8px",
+        borderRadius: 999,
+        fontSize: 10,
+        fontWeight: 800,
+        letterSpacing: "0.08em",
+        textTransform: "uppercase",
+        color: "#4ade80",
+        background: "rgba(34,197,94,0.12)",
+        border: "1px solid rgba(34,197,94,0.28)",
+        lineHeight: 1.2,
+      }}
+    >
+      Free
+    </span>
+  );
+}
+
+function WorkflowTipsPanel({ mobile = false }: { mobile?: boolean }) {
+  return (
+    <div
+      style={{
+        borderRadius: mobile ? 18 : 20,
+        padding: mobile ? "16px 16px" : "20px 22px",
+        background: "rgba(255,255,255,0.025)",
+        border: "1px solid rgba(255,255,255,0.07)",
+        flexGrow: 1,
+      }}
+    >
+      <p
+        style={{
+          fontSize: mobile ? 15 : 14,
+          fontWeight: 700,
+          marginBottom: mobile ? 12 : 14,
+          color: "white",
+        }}
+      >
+        Workflow tips
+      </p>
+
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: mobile ? 10 : 14,
+        }}
+      >
+        {WORKFLOW_TIPS.map(({ tip, cat }) => (
+          <div
+            key={cat}
+            style={{
+              display: "flex",
+              gap: mobile ? 10 : 10,
+              alignItems: "flex-start",
+              padding: mobile ? "10px 10px" : "0",
+              borderRadius: mobile ? 14 : 0,
+              background: mobile ? "rgba(255,255,255,0.025)" : "transparent",
+              border: mobile
+                ? "1px solid rgba(255,255,255,0.06)"
+                : "1px solid transparent",
+            }}
+          >
+            <span
+              style={{
+                flexShrink: 0,
+                marginTop: 1,
+                padding: mobile ? "2px 8px" : "1px 7px",
+                borderRadius: 99,
+                fontSize: mobile ? 10 : 10,
+                fontWeight: 700,
+                background: LI_SUBTLE,
+                border: "1px solid " + LI_BORDER,
+                color: LI_LIGHT,
+                letterSpacing: "0.04em",
+              }}
+            >
+              {cat}
+            </span>
+
+            <span
+              style={{
+                fontSize: mobile ? 12 : 13,
+                color: "rgba(255,255,255,0.6)",
+                lineHeight: mobile ? 1.55 : 1.6,
+              }}
+            >
+              {tip}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function makeInitialSections(): Record<SectionKey, SectionState> {
   return {
     headline: { status: "idle" },
@@ -460,13 +599,7 @@ function formatSectionOutput(section: SectionKey, data: unknown): string {
             "Issued by: " + issuer,
           ];
 
-          const issued = [c.issueMonth, c.issueYear].filter(Boolean).join(" ");
-          if (issued) parts.push("Issue date: " + issued);
-
-          const expiry = [c.expiryMonth, c.expiryYear]
-            .filter(Boolean)
-            .join(" ");
-          if (expiry) parts.push("Expiration: " + expiry);
+          if (c.issueDate) parts.push("Issue date: " + c.issueDate);
 
           if (c.credentialId) parts.push("Credential ID: " + c.credentialId);
           if (c.credentialUrl) parts.push("Credential URL: " + c.credentialUrl);
@@ -491,12 +624,12 @@ function formatSectionOutput(section: SectionKey, data: unknown): string {
 
           const parts: string[] = ["Project " + (i + 1) + ": " + projectName];
 
-          if (p.url) parts.push("URL: " + p.url);
+          if (p.link) parts.push("URL: " + p.link);
           if (p.description) parts.push("Description:\n" + p.description);
 
-          if (Array.isArray(p.skills) && p.skills.length) {
-            parts.push("Skills (top 5): " + p.skills.slice(0, 5).join(", "));
-          }
+          if (Array.isArray(p.tech) && p.tech.length) {
+  parts.push("Skills (top 5): " + p.tech.slice(0, 5).join(", "));
+}
 
           const start = [p.startMonth, p.startYear].filter(Boolean).join(" ");
           if (start) parts.push("Start date: " + start);
@@ -583,6 +716,49 @@ function scoreResumeDeterministic(
   const issues: ATSIssue[] = [];
   const categories: ATSCategory[] = [];
 
+  const experience = structured.experience || [];
+  const skills = structured.skills || [];
+  const education = structured.education || [];
+  const projects = structured.projects || [];
+  const certifications = structured.certifications || [];
+  const allBullets = experience.flatMap((r) => r.bullets || []);
+
+  const corpus = [
+    structured.basics?.name,
+    structured.basics?.email,
+    structured.basics?.phone,
+    structured.basics?.summary,
+    ...skills,
+    ...experience.flatMap((r) => [
+      r.title,
+      r.company,
+      r.location,
+      ...(r.bullets || []),
+      ...(r.skills || []),
+    ]),
+   ...education.flatMap((e) => [e.school, e.degree, e.field]),
+  ...projects.flatMap((p) => [p.name, p.description, ...(p.tech || [])]),
+    ...certifications.flatMap((c) => [c.name, c.issuer]),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
+  const totalSignalLength = corpus.length;
+  const roleWords = Array.from(
+    new Set(
+      String(targetRole || "")
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((w) => w.length > 3)
+    )
+  );
+
+  let hardPenalty = 0;
+
+  // Completeness
   let comp = 25;
   if (!structured.basics?.name?.trim()) {
     comp -= 5;
@@ -600,23 +776,25 @@ function scoreResumeDeterministic(
       fix: "Add a plaintext email outside of tables or header images.",
     });
   }
-  if (!(structured.experience || []).length) {
-    comp -= 10;
+  if (!(experience || []).length) {
+    comp -= 12;
     issues.push({
       severity: "critical",
       message: "No experience entries parsed",
       fix: "Experience section may be in a layout the parser can't read. Use single-column plain text.",
     });
+    hardPenalty += 12;
   }
-  if ((structured.skills || []).length < 5) {
-    comp -= 5;
+  if (skills.length < 5) {
+    comp -= 6;
     issues.push({
-      severity: "warning",
-      message: `Only ${(structured.skills || []).length} skills detected`,
+      severity: skills.length === 0 ? "critical" : "warning",
+      message: `Only ${skills.length} skills detected`,
       fix: "Add a dedicated Skills section with 10-20 tools and technologies in plain text.",
     });
+    if (skills.length === 0) hardPenalty += 8;
   }
-  if (!(structured.education || []).length) {
+  if (!education.length) {
     comp -= 2;
     issues.push({
       severity: "suggestion",
@@ -624,14 +802,45 @@ function scoreResumeDeterministic(
       fix: "Add an Education section — many ATS systems filter on degree.",
     });
   }
+  if (
+    !structured.basics?.summary?.trim() &&
+    !projects.length &&
+    !certifications.length &&
+    experience.length <= 1
+  ) {
+    comp -= 3;
+    issues.push({
+      severity: "warning",
+      message: "Resume content looks thin for ATS ranking",
+      fix: "Add a short summary plus clearer experience bullets, projects, or certifications.",
+    });
+  }
+  if (totalSignalLength < 350) {
+    comp -= 6;
+    issues.push({
+      severity: "critical",
+      message: "Very little readable content was extracted from the document",
+      fix: "Avoid scans, tables, text boxes, and multi-column layouts. Use a simpler resume format.",
+    });
+    hardPenalty += 10;
+  }
   categories.push({ label: "Completeness", score: Math.max(0, comp), max: 25 });
 
+  // Formatting
   let fmt = 20;
-  const allBullets = (structured.experience || []).flatMap((r) => r.bullets || []);
   const avgLen = allBullets.length
-    ? allBullets.reduce((s, b) => s + b.split(/\s+/).length, 0) /
-      allBullets.length
+    ? allBullets.reduce((s, b) => s + b.split(/\s+/).length, 0) / allBullets.length
     : 0;
+
+  if (experience.length > 0 && allBullets.length === 0) {
+    fmt = Math.min(fmt, 8);
+    issues.push({
+      severity: "critical",
+      message: "Roles were parsed, but no bullet points were detected",
+      fix: "Use standard bullets under each role and avoid columns, shapes, and tables for experience content.",
+    });
+    hardPenalty += 10;
+  }
 
   if (avgLen > 35) {
     fmt -= 5;
@@ -642,16 +851,14 @@ function scoreResumeDeterministic(
     });
   }
   if (avgLen > 0 && avgLen < 8) {
-    fmt -= 4;
+    fmt -= 5;
     issues.push({
       severity: "warning",
       message: "Bullets are too short for ATS keyword matching",
       fix: "Expand bullets: what you did, with which tool, and what the outcome was.",
     });
   }
-  const sparseRoles = (structured.experience || []).filter(
-    (r) => (r.bullets || []).length < 2
-  );
+  const sparseRoles = experience.filter((r) => (r.bullets || []).length < 2);
   if (sparseRoles.length) {
     fmt -= 4;
     issues.push({
@@ -660,88 +867,181 @@ function scoreResumeDeterministic(
       fix: "Each role needs 2-5 bullets to be visible to ATS scanners.",
     });
   }
-  categories.push({ label: "Formatting", score: Math.max(0, fmt), max: 20 });
 
-  let impact = 20;
-  const WEAK = [
-    "responsible for",
-    "helped",
-    "assisted",
-    "worked on",
-    "involved in",
-    "participated in",
-    "supported",
-    "contributed to",
-  ];
-  const weakCount = allBullets.filter((b) =>
-    WEAK.some((w) => b.toLowerCase().startsWith(w))
-  ).length;
-
-  if (weakCount) {
-    impact -= Math.min(10, weakCount * 3);
+  const rolesWithDates = experience.filter(
+    (r) => r.startDate?.trim() || r.endDate?.trim()
+  );
+  if (experience.length > 0 && rolesWithDates.length < experience.length * 0.6) {
+    fmt -= 4;
     issues.push({
-      severity: weakCount >= 3 ? "critical" : "warning",
-      message: `${weakCount} bullet(s) start with weak phrases like "Responsible for"`,
-      fix: 'Replace with strong past-tense verbs: "Automated", "Reduced", "Delivered", "Led", "Built".',
+      severity: "warning",
+      message: "Many roles are missing dates",
+      fix: "Add consistent dates for each role using Mon YYYY – Mon YYYY or YYYY – YYYY.",
     });
   }
 
-  const metricRatio = allBullets.length
-    ? allBullets.filter((b) => /\d+[\s%xX]|[$£€]\d|\d+[km+]/i.test(b)).length /
-      allBullets.length
-    : 0;
+  categories.push({ label: "Formatting", score: Math.max(0, fmt), max: 20 });
 
-  if (metricRatio < 0.25 && allBullets.length >= 4) {
-    impact -= 6;
+  // Impact
+  let impact = 20;
+  if (!allBullets.length) {
+    impact = 3;
     issues.push({
-      severity: "warning",
-      message: `Only ${Math.round(
-        metricRatio * 100
-      )}% of bullets have measurable outcomes (target: 30%+)`,
-      fix: "Add numbers, percentages, dollar amounts, or team sizes wherever plausible.",
+      severity: "critical",
+      message: "No bullet-level achievement language was detected",
+      fix: "Add achievement-oriented bullets under each role with action verbs and outcomes.",
     });
+  } else {
+    const WEAK = [
+      "responsible for",
+      "helped",
+      "assisted",
+      "worked on",
+      "involved in",
+      "participated in",
+      "supported",
+      "contributed to",
+    ];
+    const weakCount = allBullets.filter((b) =>
+      WEAK.some((w) => b.toLowerCase().startsWith(w))
+    ).length;
+
+    if (weakCount) {
+      impact -= Math.min(10, weakCount * 3);
+      issues.push({
+        severity: weakCount >= 3 ? "critical" : "warning",
+        message: `${weakCount} bullet(s) start with weak phrases like "Responsible for"`,
+        fix: 'Replace with strong past-tense verbs: "Automated", "Reduced", "Delivered", "Led", "Built".',
+      });
+    }
+
+    const metricRatio = allBullets.length
+      ? allBullets.filter((b) => /\d+[\s%xX]|[$£€]\d|\d+[km+]/i.test(b)).length /
+        allBullets.length
+      : 0;
+
+    if (metricRatio < 0.25 && allBullets.length >= 4) {
+      impact -= 6;
+      issues.push({
+        severity: "warning",
+        message: `Only ${Math.round(
+          metricRatio * 100
+        )}% of bullets have measurable outcomes (target: 30%+)`,
+        fix: "Add numbers, percentages, dollar amounts, or team sizes wherever plausible.",
+      });
+    }
   }
   categories.push({ label: "Impact Language", score: Math.max(0, impact), max: 20 });
 
+  // Role alignment
   let align = 15;
-  const roleWords = targetRole.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
-  const titlesText = (structured.experience || [])
+  const titlesText = experience
     .map((r) => r.title?.toLowerCase() || "")
     .join(" ");
-  const matches = roleWords.filter((w) => titlesText.includes(w)).length;
+  const skillsText = skills.join(" ").toLowerCase();
+  const matches = roleWords.filter(
+    (w) => titlesText.includes(w) || skillsText.includes(w)
+  ).length;
 
-  if (roleWords.length && matches < Math.ceil(roleWords.length / 2)) {
+  if (!targetRole.trim()) {
+    align = 5;
+    issues.push({
+      severity: "suggestion",
+      message: "No target role provided",
+      fix: "Add a target role so scoring can measure role alignment correctly.",
+    });
+    hardPenalty += 4;
+  } else if (roleWords.length && matches === 0) {
+    align -= 9;
+    issues.push({
+      severity: "critical",
+      message: `Your parsed resume shows almost no alignment to "${targetRole}"`,
+      fix: "Use the target role wording in your summary, skills, and relevant bullets where accurate.",
+    });
+  } else if (roleWords.length && matches < Math.ceil(roleWords.length / 2)) {
     align -= 6;
     issues.push({
       severity: "warning",
-      message: `Job titles don't closely match "${targetRole}"`,
-      fix: "Bridge the gap in your About section by naming the target role and framing your history toward it.",
+      message: `Job titles and skills don't closely match "${targetRole}"`,
+      fix: "Bridge the gap in your About section and skills by explicitly framing your experience toward the target role.",
     });
   }
+
+  if (!experience.length) {
+    align = Math.min(align, 5);
+  }
+
   categories.push({ label: "Role Alignment", score: Math.max(0, align), max: 15 });
 
-  categories.push({ label: "Keyword Match", score: 10, max: 20 });
-  issues.push({
-    severity: "suggestion",
-    message: "Paste a job description for deeper keyword analysis",
-    fix: "Adding a JD to the Optimization Context panel enables per-keyword gap scoring.",
+  // Keyword match
+  let keywordScore = 0;
+
+  if (!targetRole.trim()) {
+    keywordScore = 2;
+    issues.push({
+      severity: "suggestion",
+      message: "Keyword scoring is limited without a target role",
+      fix: "Enter the exact target role for a more useful ATS score.",
+    });
+  } else {
+    const matchedRoleWords = roleWords.filter((w) => corpus.includes(w)).length;
+    const roleCoverage = roleWords.length ? matchedRoleWords / roleWords.length : 0;
+
+    keywordScore += Math.round(roleCoverage * 10);
+    if (skills.length >= 5) keywordScore += 2;
+    if (skills.length >= 10) keywordScore += 2;
+    if (skills.length >= 15) keywordScore += 2;
+
+    if (matchedRoleWords === 0) {
+      keywordScore = Math.min(keywordScore, 4);
+      issues.push({
+        severity: "critical",
+        message: `Core role keywords for "${targetRole}" are barely visible`,
+        fix: "Add exact role-relevant tools, methods, and responsibilities where they are genuinely accurate.",
+      });
+    } else if (roleCoverage < 0.5) {
+      issues.push({
+        severity: "warning",
+        message: "Keyword coverage for the target role is still weak",
+        fix: "Increase role-specific keywords in your summary, skills, and bullets.",
+      });
+    }
+
+    if (skills.length < 5) {
+      keywordScore = Math.min(keywordScore, 4);
+    }
+
+    if (!experience.length || !allBullets.length) {
+      keywordScore = Math.min(keywordScore, 3);
+    }
+  }
+
+  categories.push({
+    label: "Keyword Match",
+    score: Math.max(0, Math.min(20, keywordScore)),
+    max: 20,
   });
 
   const rawTotal = categories.reduce((s, c) => s + c.score, 0);
   const maxTotal = categories.reduce((s, c) => s + c.max, 0);
-  const overallScore = Math.round((rawTotal / maxTotal) * 100);
+  const overallScore = Math.max(
+    0,
+    Math.round((rawTotal / maxTotal) * 100) - hardPenalty
+  );
+
   const grade =
     overallScore >= 85
       ? "A"
-      : overallScore >= 70
+      : overallScore >= 72
         ? "B"
-        : overallScore >= 55
+        : overallScore >= 58
           ? "C"
-          : overallScore >= 40
+          : overallScore >= 42
             ? "D"
             : "F";
 
-  const keywordsFound = (structured.skills || []).slice(0, 8);
+  const keywordsFound = skills.slice(0, 8);
+
   const COMMON_GAPS: Record<string, string[]> = {
     "data analyst": ["SQL", "Tableau", "Power BI", "Excel", "Statistics", "DAX"],
     "data engineer": ["SQL", "dbt", "Kafka", "Spark", "Airflow", "Databricks"],
@@ -762,10 +1062,11 @@ function scoreResumeDeterministic(
       "Stakeholder Management",
     ],
   };
+
   const roleKey = Object.keys(COMMON_GAPS).find((k) =>
     targetRole.toLowerCase().includes(k)
   );
-  const allSkillsLower = (structured.skills || []).map((s) => s.toLowerCase());
+  const allSkillsLower = skills.map((s) => s.toLowerCase());
   const keywordsMissing = roleKey
     ? (COMMON_GAPS[roleKey] || [])
         .filter((k) => !allSkillsLower.some((s) => s.includes(k.toLowerCase())))
@@ -773,16 +1074,25 @@ function scoreResumeDeterministic(
     : [];
 
   const criticalCount = issues.filter((i) => i.severity === "critical").length;
+
   const summary =
     overallScore >= 80
       ? `Strong ATS profile.${
           criticalCount
-            ? ` Fix ${criticalCount} critical issue(s) to reach tier A.`
-            : " Focus on keyword density to maximise recruiter ranking."
+            ? ` Fix ${criticalCount} critical issue(s) to reach the top tier.`
+            : " Tighten keyword coverage to improve recruiter visibility."
         }`
       : overallScore >= 60
-        ? `Solid foundation with gaps. ${criticalCount} critical issue(s) need fixing before applying.`
-        : `Significant ATS issues detected. ${criticalCount} critical — start there before applying to roles.`;
+        ? `Solid base with important gaps. ${
+            criticalCount
+              ? `${criticalCount} critical issue(s) need attention first.`
+              : "Bullet language and keyword coverage still need work."
+          }`
+        : `Significant ATS issues detected. ${
+            criticalCount
+              ? `${criticalCount} critical issue(s) should be fixed before applying.`
+              : "The current resume structure is too weak for reliable ATS performance."
+          }`;
 
   return {
     overallScore,
@@ -1454,6 +1764,17 @@ export default function OptimizePage() {
   const resultsRef = useRef<HTMLDivElement>(null);
   const genAllAbort = useRef<boolean>(false);
   const sectionsRef = useRef<Record<SectionKey, SectionState>>(sections);
+
+  const scrollToResultsOnPhone = useCallback((delay = 180) => {
+  if (!isPhoneViewport()) return;
+  window.setTimeout(() => {
+    resultsRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }, delay);
+}, []);
+
   const generationLockRef = useRef<
     null | { type: "section"; section: SectionKey } | { type: "all" }
   >(null);
@@ -2128,12 +2449,14 @@ export default function OptimizePage() {
         localStorage.removeItem("linkedup_pending_structured_json");
         localStorage.removeItem("linkedup_pending_ctx_json");
 
-        setIsGenerateAllUnlocked(true);
-        flash.success(
-          "Generate All is now unlocked for this workspace.",
-          "Payment successful"
-        );
-        await generateAll();
+       setIsGenerateAllUnlocked(true);
+setActiveTab("sections");
+scrollToResultsOnPhone();
+flash.success(
+  "Generate All is now unlocked for this workspace.",
+  "Payment successful"
+);
+await generateAll();
       } catch (error: unknown) {
         flash.error(
           error instanceof Error ? error.message : "Payment failed. Please try again.",
@@ -2145,7 +2468,7 @@ export default function OptimizePage() {
     };
 
     run();
-  }, [
+    }, [
     isLoaded,
     isSignedIn,
     parsedId,
@@ -2154,6 +2477,7 @@ export default function OptimizePage() {
     isPaymentLoading,
     isGenerateAllUnlocked,
     genAllRunning,
+    scrollToResultsOnPhone,
   ]);
 
   async function parseResume() {
@@ -2635,11 +2959,13 @@ export default function OptimizePage() {
       }
 
       setIsGenerateAllUnlocked(true);
-      flash.success(
-        "Generate All has been unlocked for this workspace.",
-        "Payment successful"
-      );
-      await generateAll(allSectionsDone);
+setActiveTab("sections");
+scrollToResultsOnPhone();
+flash.success(
+  "Generate All has been unlocked for this workspace.",
+  "Payment successful"
+);
+await generateAll(allSectionsDone);
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : "Payment failed. Please try again.";
@@ -2746,16 +3072,107 @@ export default function OptimizePage() {
   return (
     <>
       <style>{`
-        @keyframes liDot     { 0%,100%{opacity:.25;transform:scale(.75)} 50%{opacity:1;transform:scale(1.1)} }
-        @keyframes liSpin    { to{transform:rotate(360deg)} }
-        @keyframes liFadeUp  { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:none} }
-        @keyframes liBreathe { 0%,100%{opacity:.6} 50%{opacity:1} }
-        .li-fade-up { animation: liFadeUp 0.5s ease both; }
-        input,select,textarea { caret-color: ${LI_LIGHT}; }
-        input:focus,select:focus,textarea:focus { border-color: ${LI_BORDER} !important; outline: none; }
-        ::-webkit-scrollbar { width:4px; height:4px; }
-        ::-webkit-scrollbar-thumb { background:${LI_SUBTLE}; border-radius:4px; }
-      `}</style>
+  @keyframes liDot     { 0%,100%{opacity:.25;transform:scale(.75)} 50%{opacity:1;transform:scale(1.1)} }
+  @keyframes liSpin    { to{transform:rotate(360deg)} }
+  @keyframes liFadeUp  { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:none} }
+  @keyframes liBreathe { 0%,100%{opacity:.6} 50%{opacity:1} }
+
+  .li-fade-up { animation: liFadeUp 0.5s ease both; }
+
+  input,select,textarea { caret-color: ${LI_LIGHT}; }
+  input:focus,select:focus,textarea:focus {
+    border-color: ${LI_BORDER} !important;
+    outline: none;
+  }
+
+  ::-webkit-scrollbar { width:4px; height:4px; }
+  ::-webkit-scrollbar-thumb {
+    background:${LI_SUBTLE};
+    border-radius:4px;
+  }
+
+  @media (max-width: 768px) {
+    .optimize-page {
+      width: 100%;
+      padding-inline: 12px !important;
+    }
+
+    .optimize-mobile-stack {
+      display: flex !important;
+      flex-direction: column;
+      gap: 14px;
+      width: 100%;
+      margin-top: 16px;
+    }
+
+    .optimize-desktop-grid {
+      display: none !important;
+    }
+
+    .optimize-main-grid,
+    .optimize-metrics-grid,
+    .optimize-preview-grid,
+    .optimize-sections-grid,
+    .optimize-ats-grid,
+    .optimize-keywords-grid {
+      display: grid;
+      grid-template-columns: 1fr !important;
+    }
+
+    .optimize-hero-head {
+      display: flex;
+      flex-direction: column !important;
+      align-items: stretch !important;
+      gap: 16px !important;
+    }
+
+    .optimize-hero-actions {
+      width: 100%;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .optimize-hero-actions > * {
+      flex: 1 1 calc(50% - 5px);
+      min-width: 0;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .optimize-tabs-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+      flex-wrap: nowrap;
+    }
+
+    .optimize-tabs-row > button {
+      flex: 0 0 auto;
+    }
+
+    .optimize-cta-row {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 12px;
+    }
+
+    .optimize-footer-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+  }
+
+  @media (min-width: 769px) {
+    .optimize-mobile-stack {
+      display: none !important;
+    }
+  }
+`}</style>
 
       <main
         className="optimize-page"
@@ -3078,138 +3495,788 @@ export default function OptimizePage() {
           </div>
         )}
 
-        <section className="optimize-main-grid">
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <ResumeUpload
-              onFile={(f) => {
-                setFile(f);
-                setFileErr(null);
+        <>
+  <div className="optimize-mobile-stack">
+    <ResumeUpload
+      onFile={(f) => {
+        setFile(f);
+        setFileErr(null);
+      }}
+      fileName={file?.name}
+      error={fileErr ?? undefined}
+    />
+
+    <OptimizationSettings
+      value={ctx}
+      onChange={setCtx}
+      highlightTargetRole={highlightTargetRole}
+    />
+
+    <WorkflowTipsPanel mobile />
+  </div>
+
+  <section className="optimize-main-grid optimize-desktop-grid">
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <ResumeUpload
+        onFile={(f) => {
+          setFile(f);
+          setFileErr(null);
+        }}
+        fileName={file?.name}
+        error={fileErr ?? undefined}
+      />
+
+      <WorkflowTipsPanel />
+    </div>
+
+    <OptimizationSettings
+      value={ctx}
+      onChange={setCtx}
+      highlightTargetRole={highlightTargetRole}
+    />
+  </section>
+</>
+
+{structured && (
+  <section
+    ref={resultsRef}
+    style={{
+      borderRadius: 20,
+      padding: "22px 24px",
+      background: "rgba(10,102,194,0.06)",
+      border: "1px solid " + LI_BORDER,
+      animation: "liFadeUp 0.5s ease both",
+    }}
+  >
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        gap: 16,
+        marginBottom: 18,
+        flexWrap: "wrap",
+      }}
+    >
+      <div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            marginBottom: 5,
+          }}
+        >
+          <div
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: "50%",
+              background: "#22c55e",
+              boxShadow: "0 0 8px #22c55e",
+            }}
+          />
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              color: "#22c55e",
+            }}
+          >
+            Parsed profile preview
+          </span>
+        </div>
+        <p style={{ fontSize: 13, color: "rgba(255,255,255,0.45)" }}>
+          Resume successfully parsed. Unlock Generate All below to fill every
+          section.
+        </p>
+      </div>
+      <div
+        style={{
+          padding: "4px 14px",
+          borderRadius: 99,
+          fontSize: 11,
+          fontFamily: "monospace",
+          background: "rgba(255,255,255,0.04)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          color: "rgba(255,255,255,0.35)",
+        }}
+      >
+        Draft ID: {parsedId || "workspace restore"}
+      </div>
+    </div>
+
+    <div className="optimize-preview-grid">
+      {[
+        {
+          label: "NAME",
+          value: structured.basics?.name || "Not found",
+          warn: !structured.basics?.name,
+        },
+        { label: "TARGET ROLE", value: ctx.targetRole || "Not set" },
+        {
+          label: "EXPERIENCE ENTRIES",
+          value: String(structured.experience?.length || 0),
+        },
+      ].map(({ label, value, warn }) => (
+        <div
+          key={label}
+          style={{
+            borderRadius: 12,
+            padding: "14px 16px",
+            background: "rgba(255,255,255,0.04)",
+            border: "1px solid rgba(255,255,255,0.07)",
+          }}
+        >
+          <p
+            style={{
+              fontSize: 10,
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.12em",
+              color: "rgba(255,255,255,0.3)",
+              marginBottom: 7,
+            }}
+          >
+            {label}
+          </p>
+          <p
+            style={{
+              fontSize: 17,
+              fontWeight: 700,
+              color: warn ? "#f87171" : "white",
+            }}
+          >
+            {value}
+          </p>
+        </div>
+      ))}
+    </div>
+
+    {topPreview.length > 0 && (
+      <div>
+        <p
+          style={{
+            fontSize: 12,
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: "0.1em",
+            color: "rgba(255,255,255,0.35)",
+            marginBottom: 9,
+          }}
+        >
+          Top parsed skills
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+          {topPreview.map((skill, i) => (
+            <span
+              key={skill}
+              style={{
+                padding: "5px 13px",
+                borderRadius: 99,
+                fontSize: 12,
+                fontWeight: 500,
+                background: LI_SUBTLE,
+                border: "1px solid " + LI_BORDER,
+                color: "#93c5fd",
+                opacity: 0,
+                animation: "liFadeUp 0.35s ease " + (i * 45 + 100) + "ms both",
               }}
-              fileName={file?.name}
-              error={fileErr ?? undefined}
+            >
+              {skill}
+            </span>
+          ))}
+        </div>
+      </div>
+    )}
+  </section>
+)}
+
+{structured && (
+  <section style={{ animation: "liFadeUp 0.5s ease 0.1s both" }}>
+    <div className="optimize-metrics-grid">
+      {[
+        {
+          label: "Sections",
+          value: doneCount + "/" + SECTION_ORDER.length,
+          sub: "optimized",
+          color: "#93c5fd",
+          locked: false,
+          free: false,
+        },
+        {
+          label: "ATS Score",
+          value: atsResult ? String(atsResult.overallScore) : "—",
+          sub: atsResult ? "Grade " + atsResult.grade : "run below",
+          color: atsResult
+            ? atsResult.overallScore >= 80
+              ? "#22c55e"
+              : atsResult.overallScore >= 60
+                ? "#fbbf24"
+                : "#f87171"
+            : "rgba(255,255,255,0.2)",
+          locked: false,
+          free: true,
+        },
+        {
+          label: "Keywords",
+          value: atsResult ? String(atsResult.keywordsFound.length) : "—",
+          sub: "matched",
+          color: "#22c55e",
+          locked: false,
+          free: true,
+        },
+        {
+          label: "Gaps",
+          value: atsResult ? String(atsResult.keywordsMissing.length) : "—",
+          sub: "to fill",
+          color: "#fbbf24",
+          locked: !isGenerateAllUnlocked,
+          free: false,
+        },
+      ].map((s, i) => (
+        <div
+          key={s.label}
+          style={{
+            borderRadius: 14,
+            padding: "15px 18px",
+            background: "rgba(255,255,255,0.025)",
+            border: "1px solid rgba(255,255,255,0.07)",
+            animation: "liFadeUp 0.4s ease " + i * 0.06 + "s both",
+            position: "relative",
+            overflow: "hidden",
+          }}
+        >
+          {s.free && (
+            <div style={{ position: "absolute", top: 12, right: 12 }}>
+              <FreeBadge />
+            </div>
+          )}
+
+          <p
+            style={{
+              fontSize: 11,
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+              color: "rgba(255,255,255,0.35)",
+              marginBottom: 4,
+            }}
+          >
+            {s.label}
+          </p>
+
+          <div style={{ position: "relative" }}>
+            <p
+              style={{
+                fontSize: 28,
+                fontWeight: 800,
+                color: s.color,
+                lineHeight: 1,
+                filter: s.locked ? "blur(8px)" : "none",
+                transition: "filter 0.2s ease",
+                userSelect: s.locked ? "none" : "auto",
+              }}
+            >
+              {atsResult && s.label === "ATS Score" ? (
+                <AnimatedNumber to={atsResult.overallScore} />
+              ) : (
+                s.value
+              )}
+            </p>
+
+            {s.locked && (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  pointerEvents: "none",
+                  fontSize: 13,
+                  color: "rgba(255,255,255,0.55)",
+                }}
+              >
+                🔒
+              </div>
+            )}
+          </div>
+
+          <p
+            style={{
+              fontSize: 11,
+              color: "rgba(255,255,255,0.3)",
+              marginTop: 3,
+            }}
+          >
+            {s.locked ? "unlock after payment" : s.sub}
+          </p>
+        </div>
+      ))}
+    </div>
+
+    <div className="optimize-tabs-row">
+      {([
+        { key: "sections", label: "Sections", free: false },
+        { key: "ats", label: "ATS Score", free: true },
+        { key: "keywords", label: "Keywords", free: true },
+      ] as { key: Tab; label: string; free: boolean }[]).map((tab) => (
+        <button
+          key={tab.key}
+          onClick={() => setActiveTab(tab.key)}
+          style={{
+            padding: "8px 20px",
+            borderRadius: 10,
+            fontSize: 13,
+            fontWeight: 500,
+            cursor: "pointer",
+            transition: "all 0.2s",
+            background: activeTab === tab.key ? LI_SUBTLE : "transparent",
+            border:
+              "1px solid " +
+              (activeTab === tab.key ? LI_BORDER : "transparent"),
+            color:
+              activeTab === tab.key
+                ? "#93c5fd"
+                : "rgba(255,255,255,0.4)",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            whiteSpace: "nowrap",
+          }}
+        >
+          <span>{tab.label}</span>
+          {tab.free && <FreeBadge />}
+        </button>
+      ))}
+
+      {activeTab === "sections" && structured && (
+        <div
+          style={{
+            marginLeft: 8,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          {!genAllRunning ? (
+            <button
+              onClick={handleGenerateAllClick}
+              disabled={isPaymentLoading}
+              style={{
+                padding: "8px 18px",
+                borderRadius: 10,
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: isPaymentLoading ? "not-allowed" : "pointer",
+                background: isPaymentLoading
+                  ? "rgba(255,255,255,0.06)"
+                  : "linear-gradient(135deg," + LI_BLUE + ",#0077b5)",
+                border: "none",
+                color: isPaymentLoading ? "rgba(255,255,255,0.25)" : "white",
+                boxShadow: isPaymentLoading
+                  ? "none"
+                  : "0 3px 14px rgba(10,102,194,0.45)",
+                transition: "all 0.2s",
+                display: "flex",
+                alignItems: "center",
+                gap: 7,
+              }}
+            >
+              <span style={{ fontSize: 15 }}>
+                {isGenerateAllUnlocked ? "⚡" : "🔒"}
+              </span>
+              {generateAllButtonLabel}
+            </button>
+          ) : (
+            <button
+              onClick={stopGenAll}
+              style={{
+                padding: "8px 18px",
+                borderRadius: 10,
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: "pointer",
+                background: "rgba(239,68,68,0.12)",
+                border: "1px solid rgba(239,68,68,0.3)",
+                color: "#fca5a5",
+                transition: "all 0.2s",
+                display: "flex",
+                alignItems: "center",
+                gap: 7,
+              }}
+            >
+              <span style={{ fontSize: 13 }}>■</span> Stop
+            </button>
+          )}
+
+          {genAllRunning && genAllIndex >= 0 && (
+            <div
+              style={{
+                padding: "6px 12px",
+                borderRadius: 99,
+                fontSize: 11,
+                fontWeight: 600,
+                background: LI_SUBTLE,
+                border: "1px solid " + LI_BORDER,
+                color: "#93c5fd",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <div
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  border: "1.5px solid transparent",
+                  borderTopColor: LI_LIGHT,
+                  animation: "liSpin 0.7s linear infinite",
+                }}
+              />
+              {genAllIndex + 1} / {generateAllTotal || SECTION_ORDER.length}
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "ats" && (
+        <button
+          onClick={refreshATS}
+          disabled={atsLoading}
+          style={{
+            marginLeft: 8,
+            padding: "8px 18px",
+            borderRadius: 10,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: atsLoading ? "not-allowed" : "pointer",
+            background: LI_SUBTLE,
+            border: "1px solid " + LI_BORDER,
+            color: "#93c5fd",
+            opacity: atsLoading ? 0.6 : 1,
+          }}
+        >
+          {atsLoading ? "Scoring..." : atsRan ? "Re-score" : "Run ATS Score"}
+        </button>
+      )}
+    </div>
+
+    {activeTab === "sections" && (
+      <div className="optimize-sections-grid">
+        {SECTION_ORDER.map((item, i) => (
+          <div
+            key={item.key}
+            style={{
+              animation: "liFadeUp 0.4s ease " + i * 0.05 + "s both",
+              height: "100%",
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            <SectionCard
+              item={item}
+              state={sections[item.key]}
+              busy={activeSection === item.key}
+              copiedSection={copiedSection}
+              queuePosition={queuePositionMap[item.key] ?? null}
+              genAllRunning={genAllRunning}
+              onCopy={handleCopy}
+              onGenerate={handleGenerateSectionClick}
             />
+          </div>
+        ))}
+      </div>
+    )}
+
+    {activeTab === "ats" && (
+      <div>
+        {atsLoading && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "60px 0",
+              gap: 16,
+              textAlign: "center",
+            }}
+          >
+            <div style={{ position: "relative", width: 52, height: 52 }}>
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  borderRadius: "50%",
+                  border: "2px solid " + LI_BORDER,
+                  animation: "liBreathe 1.5s ease-in-out infinite",
+                }}
+              />
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 5,
+                  borderRadius: "50%",
+                  border: "2px solid transparent",
+                  borderTopColor: LI_LIGHT,
+                  animation: "liSpin 0.85s linear infinite",
+                }}
+              />
+            </div>
+            <div>
+              <p style={{ fontSize: 15, fontWeight: 600 }}>
+                Analyzing for ATS compatibility...
+              </p>
+              <p
+                style={{
+                  fontSize: 12,
+                  color: "rgba(255,255,255,0.4)",
+                  marginTop: 5,
+                }}
+              >
+                Scanning keyword density · Checking formatting · Scoring impact language
+              </p>
+            </div>
+          </div>
+        )}
+
+        {!atsLoading && !atsResult && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "60px 0",
+              gap: 10,
+              textAlign: "center",
+            }}
+          >
+            <div style={{ fontSize: 42, color: "rgba(10,102,194,0.35)" }}>◎</div>
+            <p style={{ fontSize: 14, fontWeight: 600 }}>No ATS score yet</p>
+            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>
+              Click &quot;Run ATS Score&quot; above
+            </p>
+          </div>
+        )}
+
+        {!atsLoading && atsResult && (
+          <div className="optimize-ats-grid">
+            <div
+              style={{
+                borderRadius: 18,
+                padding: "24px 20px",
+                background: "rgba(255,255,255,0.025)",
+                border: "1px solid rgba(255,255,255,0.07)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 20,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "center" }}>
+                <ScoreRing score={atsResult.overallScore} grade={atsResult.grade} />
+              </div>
+              <p
+                style={{
+                  fontSize: 12,
+                  color: "rgba(255,255,255,0.45)",
+                  textAlign: "center",
+                  lineHeight: 1.5,
+                }}
+              >
+                {atsResult.summary}
+              </p>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                  paddingTop: 12,
+                  borderTop: "1px solid rgba(255,255,255,0.06)",
+                }}
+              >
+                {atsResult.categories.map((cat, i) => (
+                  <CatBar key={cat.label} cat={cat} delay={300 + i * 100} />
+                ))}
+              </div>
+            </div>
 
             <div
               style={{
-                borderRadius: 20,
-                padding: "20px 22px",
+                borderRadius: 18,
+                padding: "22px 20px",
                 background: "rgba(255,255,255,0.025)",
                 border: "1px solid rgba(255,255,255,0.07)",
-                flexGrow: 1,
               }}
             >
-              <p
+              <div
                 style={{
-                  fontSize: 14,
-                  fontWeight: 600,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
                   marginBottom: 14,
-                  color: "white",
                 }}
               >
-                Workflow tips
-              </p>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                {[
-                  {
-                    tip: "Parse once, then use Generate All to unlock the full LinkedIn profile pack in one run.",
-                    cat: "Flow",
-                  },
-                  {
-                    tip: "Paste a real job description to improve role alignment and keyword relevance.",
-                    cat: "Quality",
-                  },
-                  {
-                    tip: "Use Branding mode for discoverability; switch to Recruiter mode when targeting a specific role.",
-                    cat: "Mode",
-                  },
-                  {
-                    tip: "Each section card will open automatically as soon as its result is ready.",
-                    cat: "Live",
-                  },
-                  {
-                    tip: "Copy directly from each finished card into LinkedIn — formatting is optimized for pasting.",
-                    cat: "Workflow",
-                  },
-                  {
-                    tip: "When signed in, every generated result should persist to your saved workspace.",
-                    cat: "Persistence",
-                  },
-                  {
-                    tip: "Uploading a new resume creates a new workspace and keeps your earlier ones in dashboard history.",
-                    cat: "History",
-                  },
-                ].map(({ tip, cat }) => (
-                  <div
-                    key={cat}
-                    style={{ display: "flex", gap: 10, alignItems: "flex-start" }}
-                  >
+                <p style={{ fontSize: 14, fontWeight: 700 }}>Issues &amp; Fixes</p>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    fontSize: 11,
+                    color: "rgba(255,255,255,0.35)",
+                  }}
+                >
+                  {(["critical", "warning", "suggestion"] as const).map((sev) => (
                     <span
-                      style={{
-                        flexShrink: 0,
-                        marginTop: 1,
-                        padding: "1px 7px",
-                        borderRadius: 99,
-                        fontSize: 10,
-                        fontWeight: 600,
-                        background: LI_SUBTLE,
-                        border: "1px solid " + LI_BORDER,
-                        color: LI_LIGHT,
-                        letterSpacing: "0.04em",
-                      }}
+                      key={sev}
+                      style={{ display: "flex", alignItems: "center", gap: 4 }}
                     >
-                      {cat}
+                      <span
+                        style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: "50%",
+                          background:
+                            sev === "critical"
+                              ? "#ef4444"
+                              : sev === "warning"
+                                ? "#f59e0b"
+                                : LI_BLUE,
+                          display: "inline-block",
+                        }}
+                      />
+                      {sev}
                     </span>
-                    <span
-                      style={{
-                        fontSize: 13,
-                        color: "rgba(255,255,255,0.6)",
-                        lineHeight: 1.6,
-                      }}
-                    >
-                      {tip}
-                    </span>
-                  </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {atsResult.issues.map((issue, i) => (
+                  <IssueRow key={i} issue={issue} delay={i * 55} />
                 ))}
               </div>
             </div>
           </div>
+        )}
+      </div>
+    )}
 
-          <OptimizationSettings
-            value={ctx}
-            onChange={setCtx}
-            highlightTargetRole={highlightTargetRole}
-          />
-        </section>
-
-        {structured && (
-          <section
-            ref={resultsRef}
+    {activeTab === "keywords" && (
+      <div>
+        {!atsResult ? (
+          <div
             style={{
-              borderRadius: 20,
-              padding: "22px 24px",
-              background: "rgba(10,102,194,0.06)",
-              border: "1px solid " + LI_BORDER,
-              animation: "liFadeUp 0.5s ease both",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "60px 0",
+              gap: 12,
+              textAlign: "center",
             }}
           >
+            <div style={{ fontSize: 42, color: "rgba(10,102,194,0.35)" }}>◈</div>
+            <p style={{ fontSize: 14, fontWeight: 600 }}>
+              Switch to ATS Score tab first
+            </p>
+            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>
+              Keyword analysis runs as part of the ATS scan
+            </p>
+          </div>
+        ) : (
+          <div className="optimize-keywords-grid">
             <div
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                gap: 16,
-                marginBottom: 18,
-                flexWrap: "wrap",
+                borderRadius: 18,
+                padding: 20,
+                background: "rgba(10,102,194,0.06)",
+                border: "1px solid " + LI_BORDER,
               }}
             >
-              <div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginBottom: 14,
+                }}
+              >
+                <div
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: "50%",
+                    background: "#22c55e",
+                    boxShadow: "0 0 7px #22c55e",
+                  }}
+                />
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#4ade80" }}>
+                  Keywords Found
+                </span>
+                <span
+                  style={{
+                    marginLeft: "auto",
+                    fontSize: 11,
+                    fontFamily: "monospace",
+                    color: "rgba(255,255,255,0.3)",
+                  }}
+                >
+                  {atsResult.keywordsFound.length} matched
+                </span>
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 8,
+                  marginBottom: 14,
+                }}
+              >
+                {atsResult.keywordsFound.map((kw, i) => (
+                  <KwChip key={kw} word={kw} found delay={i * 60} />
+                ))}
+              </div>
+
+              <p
+                style={{
+                  fontSize: 11,
+                  color: "rgba(255,255,255,0.35)",
+                  lineHeight: 1.6,
+                }}
+              >
+                These appear in your resume and match common {ctx.targetRole} requirements.
+              </p>
+            </div>
+
+            <div
+              style={{
+                borderRadius: 18,
+                padding: 20,
+                background: "rgba(239,68,68,0.05)",
+                border: "1px solid rgba(239,68,68,0.2)",
+                position: "relative",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  filter: !isGenerateAllUnlocked ? "blur(10px)" : "none",
+                  transition: "filter 0.2s ease",
+                  pointerEvents: !isGenerateAllUnlocked ? "none" : "auto",
+                  userSelect: !isGenerateAllUnlocked ? "none" : "auto",
+                }}
+              >
                 <div
                   style={{
                     display: "flex",
                     alignItems: "center",
                     gap: 8,
-                    marginBottom: 5,
+                    marginBottom: 14,
                   }}
                 >
                   <div
@@ -3217,990 +4284,293 @@ export default function OptimizePage() {
                       width: 7,
                       height: 7,
                       borderRadius: "50%",
-                      background: "#22c55e",
-                      boxShadow: "0 0 8px #22c55e",
+                      background: "#ef4444",
+                      boxShadow: "0 0 7px #ef444466",
                     }}
                   />
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "#fca5a5" }}>
+                    Keyword Gaps
+                  </span>
                   <span
                     style={{
+                      marginLeft: "auto",
                       fontSize: 11,
-                      fontWeight: 700,
-                      letterSpacing: "0.1em",
-                      textTransform: "uppercase",
-                      color: "#22c55e",
+                      fontFamily: "monospace",
+                      color: "rgba(255,255,255,0.3)",
                     }}
                   >
-                    Parsed profile preview
+                    {atsResult.keywordsMissing.length} missing
                   </span>
                 </div>
-                <p style={{ fontSize: 13, color: "rgba(255,255,255,0.45)" }}>
-                  Resume successfully parsed. Unlock Generate All below to fill
-                  every section.
-                </p>
-              </div>
-              <div
-                style={{
-                  padding: "4px 14px",
-                  borderRadius: 99,
-                  fontSize: 11,
-                  fontFamily: "monospace",
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  color: "rgba(255,255,255,0.35)",
-                }}
-              >
-                Draft ID: {parsedId || "workspace restore"}
-              </div>
-            </div>
 
-            <div className="optimize-preview-grid">
-              {[
-                {
-                  label: "NAME",
-                  value: structured.basics?.name || "Not found",
-                  warn: !structured.basics?.name,
-                },
-                { label: "TARGET ROLE", value: ctx.targetRole || "Not set" },
-                {
-                  label: "EXPERIENCE ENTRIES",
-                  value: String(structured.experience?.length || 0),
-                },
-              ].map(({ label, value, warn }) => (
                 <div
-                  key={label}
                   style={{
-                    borderRadius: 12,
-                    padding: "14px 16px",
-                    background: "rgba(255,255,255,0.04)",
-                    border: "1px solid rgba(255,255,255,0.07)",
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 8,
+                    marginBottom: 14,
                   }}
                 >
-                  <p
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 600,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.12em",
-                      color: "rgba(255,255,255,0.3)",
-                      marginBottom: 7,
-                    }}
-                  >
-                    {label}
-                  </p>
-                  <p
-                    style={{
-                      fontSize: 17,
-                      fontWeight: 700,
-                      color: warn ? "#f87171" : "white",
-                    }}
-                  >
-                    {value}
-                  </p>
+                  {atsResult.keywordsMissing.map((kw, i) => (
+                    <KwChip key={kw} word={kw} found={false} delay={i * 60} />
+                  ))}
+                  {atsResult.keywordsMissing.length === 0 && (
+                    <span style={{ fontSize: 13, color: "#4ade80" }}>
+                      ✓ No major gaps detected
+                    </span>
+                  )}
                 </div>
-              ))}
-            </div>
 
-            {topPreview.length > 0 && (
-              <div>
                 <p
                   style={{
-                    fontSize: 12,
-                    fontWeight: 600,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.1em",
+                    fontSize: 11,
                     color: "rgba(255,255,255,0.35)",
-                    marginBottom: 9,
+                    lineHeight: 1.6,
                   }}
                 >
-                  Top parsed skills
+                  Add these to your Skills section and work them into bullets where accurate.
                 </p>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-                  {topPreview.map((skill, i) => (
-                    <span
-                      key={skill}
-                      style={{
-                        padding: "5px 13px",
-                        borderRadius: 99,
-                        fontSize: 12,
-                        fontWeight: 500,
-                        background: LI_SUBTLE,
-                        border: "1px solid " + LI_BORDER,
-                        color: "#93c5fd",
-                        opacity: 0,
-                        animation: "liFadeUp 0.35s ease " + (i * 45 + 100) + "ms both",
-                      }}
-                    >
-                      {skill}
-                    </span>
-                  ))}
-                </div>
               </div>
-            )}
-          </section>
-        )}
 
-        {structured && (
-          <section style={{ animation: "liFadeUp 0.5s ease 0.1s both" }}>
-            <div className="optimize-metrics-grid">
-              {[
-                {
-                  label: "Sections",
-                  value: doneCount + "/" + SECTION_ORDER.length,
-                  sub: "optimized",
-                  color: "#93c5fd",
-                  locked: false,
-                },
-                {
-                  label: "ATS Score",
-                  value: atsResult ? String(atsResult.overallScore) : "—",
-                  sub: atsResult ? "Grade " + atsResult.grade : "run below",
-                  color: atsResult
-                    ? atsResult.overallScore >= 80
-                      ? "#22c55e"
-                      : atsResult.overallScore >= 60
-                        ? "#fbbf24"
-                        : "#f87171"
-                    : "rgba(255,255,255,0.2)",
-                  locked: false,
-                },
-                {
-                  label: "Keywords",
-                  value: atsResult ? String(atsResult.keywordsFound.length) : "—",
-                  sub: "matched",
-                  color: "#22c55e",
-                  locked: false,
-                },
-                {
-                  label: "Gaps",
-                  value: atsResult ? String(atsResult.keywordsMissing.length) : "—",
-                  sub: "to fill",
-                  color: "#fbbf24",
-                  locked: !isGenerateAllUnlocked,
-                },
-              ].map((s, i) => (
-                <div
-                  key={s.label}
-                  style={{
-                    borderRadius: 14,
-                    padding: "15px 18px",
-                    background: "rgba(255,255,255,0.025)",
-                    border: "1px solid rgba(255,255,255,0.07)",
-                    animation: "liFadeUp 0.4s ease " + i * 0.06 + "s both",
-                    position: "relative",
-                    overflow: "hidden",
-                  }}
-                >
-                  <p
-                    style={{
-                      fontSize: 11,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.08em",
-                      color: "rgba(255,255,255,0.35)",
-                      marginBottom: 4,
-                    }}
-                  >
-                    {s.label}
-                  </p>
-
-                  <div style={{ position: "relative" }}>
-                    <p
-                      style={{
-                        fontSize: 28,
-                        fontWeight: 800,
-                        color: s.color,
-                        lineHeight: 1,
-                        filter: s.locked ? "blur(8px)" : "none",
-                        transition: "filter 0.2s ease",
-                        userSelect: s.locked ? "none" : "auto",
-                      }}
-                    >
-                      {atsResult && s.label === "ATS Score" ? (
-                        <AnimatedNumber to={atsResult.overallScore} />
-                      ) : (
-                        s.value
-                      )}
-                    </p>
-
-                    {s.locked && (
-                      <div
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          pointerEvents: "none",
-                          fontSize: 13,
-                          color: "rgba(255,255,255,0.55)",
-                        }}
-                      >
-                        🔒
-                      </div>
-                    )}
-                  </div>
-
-                  <p
-                    style={{
-                      fontSize: 11,
-                      color: "rgba(255,255,255,0.3)",
-                      marginTop: 3,
-                    }}
-                  >
-                    {s.locked ? "unlock after payment" : s.sub}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            <div className="optimize-tabs-row">
-              {([
-                { key: "sections", label: "Sections" },
-                { key: "ats", label: "ATS Score" },
-                { key: "keywords", label: "Keywords" },
-              ] as { key: Tab; label: string }[]).map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
-                  style={{
-                    padding: "8px 20px",
-                    borderRadius: 10,
-                    fontSize: 13,
-                    fontWeight: 500,
-                    cursor: "pointer",
-                    transition: "all 0.2s",
-                    background: activeTab === tab.key ? LI_SUBTLE : "transparent",
-                    border:
-                      "1px solid " +
-                      (activeTab === tab.key ? LI_BORDER : "transparent"),
-                    color:
-                      activeTab === tab.key
-                        ? "#93c5fd"
-                        : "rgba(255,255,255,0.4)",
-                  }}
-                >
-                  {tab.label}
-                </button>
-              ))}
-
-              {activeTab === "sections" && structured && (
+              {!isGenerateAllUnlocked && (
                 <div
                   style={{
-                    marginLeft: 8,
+                    position: "absolute",
+                    inset: 0,
                     display: "flex",
                     alignItems: "center",
-                    gap: 8,
+                    justifyContent: "center",
+                    padding: 20,
+                    background: "rgba(3,8,20,0.12)",
                   }}
                 >
-                  {!genAllRunning ? (
-                    <button
-                      onClick={handleGenerateAllClick}
-                      disabled={isPaymentLoading}
-                      style={{
-                        padding: "8px 18px",
-                        borderRadius: 10,
-                        fontSize: 13,
-                        fontWeight: 700,
-                        cursor: isPaymentLoading ? "not-allowed" : "pointer",
-                        background: isPaymentLoading
-                          ? "rgba(255,255,255,0.06)"
-                          : "linear-gradient(135deg," + LI_BLUE + ",#0077b5)",
-                        border: "none",
-                        color: isPaymentLoading ? "rgba(255,255,255,0.25)" : "white",
-                        boxShadow: isPaymentLoading
-                          ? "none"
-                          : "0 3px 14px rgba(10,102,194,0.45)",
-                        transition: "all 0.2s",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 7,
-                      }}
-                    >
-                      <span style={{ fontSize: 15 }}>
-                        {isGenerateAllUnlocked ? "⚡" : "🔒"}
-                      </span>
-                      {generateAllButtonLabel}
-                    </button>
-                  ) : (
-                    <button
-                      onClick={stopGenAll}
-                      style={{
-                        padding: "8px 18px",
-                        borderRadius: 10,
-                        fontSize: 13,
-                        fontWeight: 700,
-                        cursor: "pointer",
-                        background: "rgba(239,68,68,0.12)",
-                        border: "1px solid rgba(239,68,68,0.3)",
-                        color: "#fca5a5",
-                        transition: "all 0.2s",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 7,
-                      }}
-                    >
-                      <span style={{ fontSize: 13 }}>■</span> Stop
-                    </button>
-                  )}
-
-                  {genAllRunning && genAllIndex >= 0 && (
+                  <div
+                    style={{
+                      textAlign: "center",
+                      borderRadius: 14,
+                      padding: "14px 18px",
+                      background: "rgba(0,0,0,0.35)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      backdropFilter: "blur(6px)",
+                    }}
+                  >
+                    <div style={{ fontSize: 18, marginBottom: 6 }}>🔒</div>
                     <div
                       style={{
-                        padding: "6px 12px",
-                        borderRadius: 99,
-                        fontSize: 11,
-                        fontWeight: 600,
-                        background: LI_SUBTLE,
-                        border: "1px solid " + LI_BORDER,
-                        color: "#93c5fd",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 6,
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: "white",
                       }}
                     >
-                      <div
-                        style={{
-                          width: 6,
-                          height: 6,
-                          borderRadius: "50%",
-                          border: "1.5px solid transparent",
-                          borderTopColor: LI_LIGHT,
-                          animation: "liSpin 0.7s linear infinite",
-                        }}
-                      />
-                      {genAllIndex + 1} / {generateAllTotal || SECTION_ORDER.length}
+                      Keyword gaps unlock after payment
                     </div>
-                  )}
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "rgba(255,255,255,0.55)",
+                        marginTop: 4,
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      Pay through Generate All to reveal missing keywords.
+                    </div>
+                  </div>
                 </div>
-              )}
-
-              {activeTab === "ats" && (
-                <button
-                  onClick={refreshATS}
-                  disabled={atsLoading}
-                  style={{
-                    marginLeft: 8,
-                    padding: "8px 18px",
-                    borderRadius: 10,
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: atsLoading ? "not-allowed" : "pointer",
-                    background: LI_SUBTLE,
-                    border: "1px solid " + LI_BORDER,
-                    color: "#93c5fd",
-                    opacity: atsLoading ? 0.6 : 1,
-                  }}
-                >
-                  {atsLoading ? "Scoring..." : atsRan ? "Re-score" : "Run ATS Score"}
-                </button>
               )}
             </div>
 
-            {activeTab === "sections" && (
-              <div className="optimize-sections-grid">
-                {SECTION_ORDER.map((item, i) => (
-                  <div
-                    key={item.key}
+            <div
+              style={{
+                gridColumn: "1 / -1",
+                borderRadius: 18,
+                padding: 20,
+                background: "rgba(255,255,255,0.025)",
+                border: "1px solid rgba(255,255,255,0.07)",
+              }}
+            >
+              <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
+                All Parsed Skills
+              </p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {(structured.skills || []).map((skill, i) => (
+                  <span
+                    key={skill}
                     style={{
-                      animation: "liFadeUp 0.4s ease " + i * 0.05 + "s both",
-                      height: "100%",
-                      display: "flex",
-                      flexDirection: "column",
+                      padding: "5px 13px",
+                      borderRadius: 99,
+                      fontSize: 12,
+                      fontWeight: 500,
+                      background: LI_SUBTLE,
+                      border: "1px solid " + LI_BORDER,
+                      color: "#93c5fd",
+                      opacity: 0,
+                      animation: "liFadeUp 0.35s ease " + i * 35 + "ms both",
                     }}
                   >
-                    <SectionCard
-                      item={item}
-                      state={sections[item.key]}
-                      busy={activeSection === item.key}
-                      copiedSection={copiedSection}
-                      queuePosition={queuePositionMap[item.key] ?? null}
-                      genAllRunning={genAllRunning}
-                      onCopy={handleCopy}
-                      onGenerate={handleGenerateSectionClick}
-                    />
-                  </div>
+                    {skill}
+                  </span>
                 ))}
               </div>
-            )}
-
-            {activeTab === "ats" && (
-              <div>
-                {atsLoading && (
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      padding: "60px 0",
-                      gap: 16,
-                      textAlign: "center",
-                    }}
-                  >
-                    <div style={{ position: "relative", width: 52, height: 52 }}>
-                      <div
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                          borderRadius: "50%",
-                          border: "2px solid " + LI_BORDER,
-                          animation: "liBreathe 1.5s ease-in-out infinite",
-                        }}
-                      />
-                      <div
-                        style={{
-                          position: "absolute",
-                          inset: 5,
-                          borderRadius: "50%",
-                          border: "2px solid transparent",
-                          borderTopColor: LI_LIGHT,
-                          animation: "liSpin 0.85s linear infinite",
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <p style={{ fontSize: 15, fontWeight: 600 }}>
-                        Analyzing for ATS compatibility...
-                      </p>
-                      <p
-                        style={{
-                          fontSize: 12,
-                          color: "rgba(255,255,255,0.4)",
-                          marginTop: 5,
-                        }}
-                      >
-                        Scanning keyword density · Checking formatting · Scoring impact language
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {!atsLoading && !atsResult && (
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      padding: "60px 0",
-                      gap: 10,
-                      textAlign: "center",
-                    }}
-                  >
-                    <div style={{ fontSize: 42, color: "rgba(10,102,194,0.35)" }}>◎</div>
-                    <p style={{ fontSize: 14, fontWeight: 600 }}>No ATS score yet</p>
-                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>
-                      Click &quot;Run ATS Score&quot; above
-                    </p>
-                  </div>
-                )}
-
-                {!atsLoading && atsResult && (
-                  <div className="optimize-ats-grid">
-                    <div
-                      style={{
-                        borderRadius: 18,
-                        padding: "24px 20px",
-                        background: "rgba(255,255,255,0.025)",
-                        border: "1px solid rgba(255,255,255,0.07)",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 20,
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "center" }}>
-                        <ScoreRing score={atsResult.overallScore} grade={atsResult.grade} />
-                      </div>
-                      <p
-                        style={{
-                          fontSize: 12,
-                          color: "rgba(255,255,255,0.45)",
-                          textAlign: "center",
-                          lineHeight: 1.5,
-                        }}
-                      >
-                        {atsResult.summary}
-                      </p>
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 10,
-                          paddingTop: 12,
-                          borderTop: "1px solid rgba(255,255,255,0.06)",
-                        }}
-                      >
-                        {atsResult.categories.map((cat, i) => (
-                          <CatBar key={cat.label} cat={cat} delay={300 + i * 100} />
-                        ))}
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        borderRadius: 18,
-                        padding: "22px 20px",
-                        background: "rgba(255,255,255,0.025)",
-                        border: "1px solid rgba(255,255,255,0.07)",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 14,
-                        }}
-                      >
-                        <p style={{ fontSize: 14, fontWeight: 700 }}>Issues &amp; Fixes</p>
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: 10,
-                            fontSize: 11,
-                            color: "rgba(255,255,255,0.35)",
-                          }}
-                        >
-                          {(["critical", "warning", "suggestion"] as const).map((sev) => (
-                            <span
-                              key={sev}
-                              style={{ display: "flex", alignItems: "center", gap: 4 }}
-                            >
-                              <span
-                                style={{
-                                  width: 6,
-                                  height: 6,
-                                  borderRadius: "50%",
-                                  background:
-                                    sev === "critical"
-                                      ? "#ef4444"
-                                      : sev === "warning"
-                                        ? "#f59e0b"
-                                        : LI_BLUE,
-                                  display: "inline-block",
-                                }}
-                              />
-                              {sev}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                        {atsResult.issues.map((issue, i) => (
-                          <IssueRow key={i} issue={issue} delay={i * 55} />
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {activeTab === "keywords" && (
-              <div>
-                {!atsResult ? (
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      padding: "60px 0",
-                      gap: 12,
-                      textAlign: "center",
-                    }}
-                  >
-                    <div style={{ fontSize: 42, color: "rgba(10,102,194,0.35)" }}>◈</div>
-                    <p style={{ fontSize: 14, fontWeight: 600 }}>
-                      Switch to ATS Score tab first
-                    </p>
-                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>
-                      Keyword analysis runs as part of the ATS scan
-                    </p>
-                  </div>
-                ) : (
-                  <div className="optimize-keywords-grid">
-                    <div
-                      style={{
-                        borderRadius: 18,
-                        padding: 20,
-                        background: "rgba(10,102,194,0.06)",
-                        border: "1px solid " + LI_BORDER,
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          marginBottom: 14,
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: 7,
-                            height: 7,
-                            borderRadius: "50%",
-                            background: "#22c55e",
-                            boxShadow: "0 0 7px #22c55e",
-                          }}
-                        />
-                        <span style={{ fontSize: 13, fontWeight: 700, color: "#4ade80" }}>
-                          Keywords Found
-                        </span>
-                        <span
-                          style={{
-                            marginLeft: "auto",
-                            fontSize: 11,
-                            fontFamily: "monospace",
-                            color: "rgba(255,255,255,0.3)",
-                          }}
-                        >
-                          {atsResult.keywordsFound.length} matched
-                        </span>
-                      </div>
-
-                      <div
-                        style={{
-                          display: "flex",
-                          flexWrap: "wrap",
-                          gap: 8,
-                          marginBottom: 14,
-                        }}
-                      >
-                        {atsResult.keywordsFound.map((kw, i) => (
-                          <KwChip key={kw} word={kw} found delay={i * 60} />
-                        ))}
-                      </div>
-
-                      <p
-                        style={{
-                          fontSize: 11,
-                          color: "rgba(255,255,255,0.35)",
-                          lineHeight: 1.6,
-                        }}
-                      >
-                        These appear in your resume and match common {ctx.targetRole} requirements.
-                      </p>
-                    </div>
-
-                    <div
-                      style={{
-                        borderRadius: 18,
-                        padding: 20,
-                        background: "rgba(239,68,68,0.05)",
-                        border: "1px solid rgba(239,68,68,0.2)",
-                        position: "relative",
-                        overflow: "hidden",
-                      }}
-                    >
-                      <div
-                        style={{
-                          filter: !isGenerateAllUnlocked ? "blur(10px)" : "none",
-                          transition: "filter 0.2s ease",
-                          pointerEvents: !isGenerateAllUnlocked ? "none" : "auto",
-                          userSelect: !isGenerateAllUnlocked ? "none" : "auto",
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                            marginBottom: 14,
-                          }}
-                        >
-                          <div
-                            style={{
-                              width: 7,
-                              height: 7,
-                              borderRadius: "50%",
-                              background: "#ef4444",
-                              boxShadow: "0 0 7px #ef444466",
-                            }}
-                          />
-                          <span style={{ fontSize: 13, fontWeight: 700, color: "#fca5a5" }}>
-                            Keyword Gaps
-                          </span>
-                          <span
-                            style={{
-                              marginLeft: "auto",
-                              fontSize: 11,
-                              fontFamily: "monospace",
-                              color: "rgba(255,255,255,0.3)",
-                            }}
-                          >
-                            {atsResult.keywordsMissing.length} missing
-                          </span>
-                        </div>
-
-                        <div
-                          style={{
-                            display: "flex",
-                            flexWrap: "wrap",
-                            gap: 8,
-                            marginBottom: 14,
-                          }}
-                        >
-                          {atsResult.keywordsMissing.map((kw, i) => (
-                            <KwChip key={kw} word={kw} found={false} delay={i * 60} />
-                          ))}
-                          {atsResult.keywordsMissing.length === 0 && (
-                            <span style={{ fontSize: 13, color: "#4ade80" }}>
-                              ✓ No major gaps detected
-                            </span>
-                          )}
-                        </div>
-
-                        <p
-                          style={{
-                            fontSize: 11,
-                            color: "rgba(255,255,255,0.35)",
-                            lineHeight: 1.6,
-                          }}
-                        >
-                          Add these to your Skills section and work them into bullets where accurate.
-                        </p>
-                      </div>
-
-                      {!isGenerateAllUnlocked && (
-                        <div
-                          style={{
-                            position: "absolute",
-                            inset: 0,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            padding: 20,
-                            background: "rgba(3,8,20,0.12)",
-                          }}
-                        >
-                          <div
-                            style={{
-                              textAlign: "center",
-                              borderRadius: 14,
-                              padding: "14px 18px",
-                              background: "rgba(0,0,0,0.35)",
-                              border: "1px solid rgba(255,255,255,0.08)",
-                              backdropFilter: "blur(6px)",
-                            }}
-                          >
-                            <div style={{ fontSize: 18, marginBottom: 6 }}>🔒</div>
-                            <div
-                              style={{
-                                fontSize: 13,
-                                fontWeight: 700,
-                                color: "white",
-                              }}
-                            >
-                              Keyword gaps unlock after payment
-                            </div>
-                            <div
-                              style={{
-                                fontSize: 11,
-                                color: "rgba(255,255,255,0.55)",
-                                marginTop: 4,
-                                lineHeight: 1.5,
-                              }}
-                            >
-                              Pay through Generate All to reveal missing keywords.
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div
-                      style={{
-                        gridColumn: "1 / -1",
-                        borderRadius: 18,
-                        padding: 20,
-                        background: "rgba(255,255,255,0.025)",
-                        border: "1px solid rgba(255,255,255,0.07)",
-                      }}
-                    >
-                      <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
-                        All Parsed Skills
-                      </p>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                        {(structured.skills || []).map((skill, i) => (
-                          <span
-                            key={skill}
-                            style={{
-                              padding: "5px 13px",
-                              borderRadius: 99,
-                              fontSize: 12,
-                              fontWeight: 500,
-                              background: LI_SUBTLE,
-                              border: "1px solid " + LI_BORDER,
-                              color: "#93c5fd",
-                              opacity: 0,
-                              animation: "liFadeUp 0.35s ease " + i * 35 + "ms both",
-                            }}
-                          >
-                            {skill}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </section>
+            </div>
+          </div>
         )}
+      </div>
+    )}
+  </section>
+)}
 
-        <section
-          style={{
-            borderRadius: 16,
-            padding: "14px 20px",
-            background: "rgba(245,158,11,0.06)",
-            border: "1px solid rgba(245,158,11,0.2)",
-            display: "flex",
-            alignItems: "flex-start",
-            gap: 12,
-          }}
-        >
-          <span style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>⚠</span>
-          <div>
-            <p
-              style={{
-                fontSize: 13,
-                fontWeight: 600,
-                color: "#fcd34d",
-                marginBottom: 3,
-              }}
-            >
-              Disclaimer — please review all AI-generated content before use
-            </p>
-            <p
-              style={{
-                fontSize: 12,
-                color: "rgba(255,255,255,0.45)",
-                lineHeight: 1.6,
-              }}
-            >
-              This tool uses AI to suggest LinkedIn profile content based on your
-              resume. Outputs may contain inaccuracies, embellishments, or
-              misrepresentations. Always verify facts, dates, titles, and metrics
-              before publishing. Never claim skills or experience you do not have.
-              The author accepts no liability for how this content is used.
-            </p>
-          </div>
-        </section>
+<section
+  style={{
+    borderRadius: 16,
+    padding: "14px 20px",
+    background: "rgba(245,158,11,0.06)",
+    border: "1px solid rgba(245,158,11,0.2)",
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 12,
+  }}
+>
+  <span style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>⚠</span>
+  <div>
+    <p
+      style={{
+        fontSize: 13,
+        fontWeight: 600,
+        color: "#fcd34d",
+        marginBottom: 3,
+      }}
+    >
+      Disclaimer — please review all AI-generated content before use
+    </p>
+    <p
+      style={{
+        fontSize: 12,
+        color: "rgba(255,255,255,0.45)",
+        lineHeight: 1.6,
+      }}
+    >
+      This tool uses AI to suggest LinkedIn profile content based on your
+      resume. Outputs may contain inaccuracies, embellishments, or
+      misrepresentations. Always verify facts, dates, titles, and metrics
+      before publishing. Never claim skills or experience you do not have.
+      The author accepts no liability for how this content is used.
+    </p>
+  </div>
+</section>
 
-        <section className="optimize-cta-row">
-          <div>
-            <p
-              style={{
-                fontSize: 15,
-                fontWeight: 700,
-                color: "white",
-                marginBottom: 4,
-              }}
-            >
-              Need help optimizing your LinkedIn or resume?
-            </p>
-            <p
-              style={{
-                fontSize: 13,
-                color: "rgba(255,255,255,0.5)",
-                lineHeight: 1.5,
-              }}
-            >
-              Reach out directly and I can help you craft a standout profile.
-            </p>
-          </div>
-          <a
-            href="mailto:piyusha.2510@gmail.com"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "10px 22px",
-              borderRadius: 12,
-              fontSize: 13,
-              fontWeight: 600,
-              background: "linear-gradient(135deg," + LI_BLUE + ",#0077b5)",
-              color: "white",
-              textDecoration: "none",
-              boxShadow: "0 4px 18px rgba(10,102,194,0.35)",
-              transition: "opacity 0.2s",
-              flexShrink: 0,
-            }}
-          >
-            <span style={{ fontSize: 15 }}>✉</span> Email me
-          </a>
-        </section>
-      </main>
+<section className="optimize-cta-row">
+  <div>
+    <p
+      style={{
+        fontSize: 15,
+        fontWeight: 700,
+        color: "white",
+        marginBottom: 4,
+      }}
+    >
+      Need help optimizing your LinkedIn or resume?
+    </p>
+    <p
+      style={{
+        fontSize: 13,
+        color: "rgba(255,255,255,0.5)",
+        lineHeight: 1.5,
+      }}
+    >
+      Reach out directly and I can help you craft a standout profile.
+    </p>
+  </div>
+  <a
+    href="mailto:piyusha.2510@gmail.com"
+    style={{
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 8,
+      padding: "10px 22px",
+      borderRadius: 12,
+      fontSize: 13,
+      fontWeight: 600,
+      background: "linear-gradient(135deg," + LI_BLUE + ",#0077b5)",
+      color: "white",
+      textDecoration: "none",
+      boxShadow: "0 4px 18px rgba(10,102,194,0.35)",
+      transition: "opacity 0.2s",
+      flexShrink: 0,
+    }}
+  >
+    <span style={{ fontSize: 15 }}>✉</span> Email me
+  </a>
+</section>
+</main>
 
-      <footer
-        style={{
-          marginTop: 48,
-          borderTop: "1px solid rgba(255,255,255,0.07)",
-          padding: "20px 0 28px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 16,
-          fontSize: 13,
-        }}
-      >
-        <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 12 }}>
-          © {new Date().getFullYear()} Piyusha Sayal. All rights reserved.
-        </p>
-        <div className="optimize-footer-links">
-          <a
-            href="https://piyushasayal.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              color: "rgba(255,255,255,0.45)",
-              textDecoration: "none",
-              fontSize: 13,
-              fontWeight: 500,
-              transition: "color 0.2s",
-            }}
-          >
-            <span style={{ fontSize: 14 }}>◈</span> Portfolio
-          </a>
-          <a
-            href="https://linkedin.com/in/piyusha-sayal"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              color: "rgba(255,255,255,0.45)",
-              textDecoration: "none",
-              fontSize: 13,
-              fontWeight: 500,
-              transition: "color 0.2s",
-            }}
-          >
-            <span style={{ fontSize: 14, color: LI_LIGHT }}>in</span> LinkedIn
-          </a>
-          <a
-            href="mailto:piyusha.2510@gmail.com"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              color: "rgba(255,255,255,0.45)",
-              textDecoration: "none",
-              fontSize: 13,
-              fontWeight: 500,
-              transition: "color 0.2s",
-            }}
-          >
-            <span style={{ fontSize: 14 }}>✉</span> Email me
-          </a>
-        </div>
-      </footer>
-    </>
+<footer
+  style={{
+    marginTop: 48,
+    borderTop: "1px solid rgba(255,255,255,0.07)",
+    padding: "20px 0 28px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 16,
+    fontSize: 13,
+  }}
+>
+  <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 12 }}>
+    © {new Date().getFullYear()} Piyusha Sayal. All rights reserved.
+  </p>
+  <div className="optimize-footer-links">
+    <a
+      href="https://piyushasayal.com"
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        color: "rgba(255,255,255,0.45)",
+        textDecoration: "none",
+        fontSize: 13,
+        fontWeight: 500,
+        transition: "color 0.2s",
+      }}
+    >
+      <span style={{ fontSize: 14 }}>◈</span> Portfolio
+    </a>
+    <a
+      href="https://linkedin.com/in/piyusha-sayal"
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        color: "rgba(255,255,255,0.45)",
+        textDecoration: "none",
+        fontSize: 13,
+        fontWeight: 500,
+        transition: "color 0.2s",
+      }}
+    >
+      <span style={{ fontSize: 14, color: LI_LIGHT }}>in</span> LinkedIn
+    </a>
+    <a
+      href="mailto:piyusha.2510@gmail.com"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        color: "rgba(255,255,255,0.45)",
+        textDecoration: "none",
+        fontSize: 13,
+        fontWeight: 500,
+        transition: "color 0.2s",
+      }}
+    >
+      <span style={{ fontSize: 14 }}>✉</span> Email me
+    </a>
+  </div>
+</footer>
+</>
   );
 }

@@ -48,23 +48,23 @@ export function OptimizationSettings({
   const focusBorder = "focus:border-[color:var(--luna-200)]/60";
 
   return (
-    <div className="rounded-[28px] border border-white/10 bg-white/[0.04] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-2xl sm:p-6">
+    <div className="rounded-[24px] border border-white/10 bg-white/[0.04] p-4 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-2xl sm:rounded-[28px] sm:p-6">
       <div className="flex items-start gap-3">
-        <div className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[color:var(--luna-200)]/20 bg-[color:var(--luna-400)]/20 text-[color:var(--luna-100)]">
+        <div className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[color:var(--luna-200)]/20 bg-[color:var(--luna-400)]/20 text-[color:var(--luna-100)] sm:h-11 sm:w-11">
           ✦
         </div>
         <div>
-          <div className="text-lg font-semibold text-white">
+          <div className="text-[17px] font-semibold text-white sm:text-lg">
             Optimization Context
           </div>
-          <div className="mt-1 text-sm leading-6 text-white/68">
+          <div className="mt-1 text-[13px] leading-6 text-white/68 sm:text-sm">
             This controls positioning, keyword focus, and tone. Keep it tight so
             each section call stays efficient.
           </div>
         </div>
       </div>
 
-      <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:mt-5 sm:gap-4 md:grid-cols-2">
         <Field
           label="Target Role"
           hint="Required — drives all keyword and tone decisions."
@@ -147,7 +147,7 @@ export function OptimizationSettings({
           >
             <textarea
               className={[
-                "min-h-[160px]",
+                "min-h-[132px] sm:min-h-[160px]",
                 inputBase,
                 defaultBorder,
                 focusBorder,
@@ -168,7 +168,7 @@ export function OptimizationSettings({
       </div>
 
       {value.targetRole && (
-        <div className="mt-5 rounded-2xl border border-white/8 bg-black/20 px-4 py-3 text-xs leading-5 text-white/60">
+        <div className="mt-4 rounded-2xl border border-white/8 bg-black/20 px-4 py-3 text-xs leading-5 text-white/60 sm:mt-5">
           <span className="font-medium text-white/80">Active context:</span>{" "}
           {value.seniority} {value.targetRole}
           {value.industry ? ` · ${value.industry}` : ""}

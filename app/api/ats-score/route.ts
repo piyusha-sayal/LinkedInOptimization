@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
       targetJobText: targetJobText || session.ctx?.targetJobText || "",
       industry: session.ctx?.industry || "",
       seniority: session.ctx?.seniority || "Mid",
+      mode: session.ctx?.mode || "Branding",
     };
 
     const deterministicResult = scoreResumeDeterministic(session.structured, ctx);
